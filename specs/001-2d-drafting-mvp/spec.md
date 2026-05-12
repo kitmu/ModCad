@@ -11,6 +11,12 @@ web with much better UI. v1 scope: 2D drafting MVP with lines, polylines,
 circles, arcs, rectangles, dimensions, layers, snapping, pan/zoom, DXF
 import/export, modern UI (command palette, contextual toolbars, dark mode)."
 
+## Clarifications
+
+### Session 2026-05-12
+
+- Q: PDF export — vector or rasterized? → A: Vector PDF by default; entities that cannot be cleanly vectorized are embedded as raster within the same vector PDF page.
+
 ## User Scenarios & Testing
 
 ### User Story 1 — Draft a simple plan from scratch (Priority: P1)
@@ -325,7 +331,12 @@ frame time must be ≤ 16 ms on the baseline hardware.
   preserving lines, polylines, circles, arcs, ellipses, text,
   dimensions, layers, colors, and lineweights.
 - **FR-018**: The application MUST export the current drawing to DXF
-  R2018, SVG, and PDF.
+  R2018, SVG, and PDF. PDF export MUST be vector by default: every
+  geometric entity renders as a real PDF path, text as selectable text,
+  and layers as PDF optional-content groups. Entity types that cannot
+  be cleanly vectorized MUST be embedded as raster regions within the
+  same vector PDF page (mixed-mode), with a non-blocking notice listing
+  which entities fell back to raster.
 - **FR-019**: Unsupported entities or features encountered during DXF
   import MUST produce a non-blocking warning listing the affected
   entity types and counts; import MUST NOT corrupt the rest of the
