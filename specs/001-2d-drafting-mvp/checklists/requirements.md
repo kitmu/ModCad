@@ -48,3 +48,26 @@ to plan.md per the constitution.
    "Take over editing" affordance and force-transfer timeout.
 5. Multi-document — one drawing per tab in v1; in-tab tabs and detached
    windows deferred to post-v1.
+
+### Post-clarify architectural refinements (Session 2026-05-12)
+
+After an external CAD-architecture consultation, the following were
+folded in directly (no questions reopened):
+
+6. Selection model — dual (pre- and post-selection both supported);
+   not pinned to select-first because trim, hatch, etc. need
+   post-selection.
+7. Trim / Extend / Fillet / Chamfer — dual interaction: Quick mode
+   (hover-preview, first-crossing) and Classic mode (explicit edges
+   via single-pick, fence, window, crossing, or area drag).
+8. Predictive snapping — single marker at a time, motion-inferred, Tab
+   to cycle alternates, inline distance/angle, soft vs hard distinction.
+9. Per-step undo inside multi-step commands; Escape cancels the whole
+   in-progress command.
+10. Grip-with-contextual-mini-toolbar for direct manipulation.
+11. Renderer — WebGPU primary, WebGL2 automatic fallback (constitution
+    bumped to v0.2.0 to reflect the change).
+12. Future Directions section added to spec: components-as-blocks,
+    constraints-by-default, multiplayer, NL command, smart placement,
+    versioned-URL refs, paper-space viewport overrides. All out of
+    scope for v1.

@@ -20,6 +20,9 @@ import/export, modern UI (command palette, contextual toolbars, dark mode)."
 - Q: Telemetry and privacy stance? → A: Opt-in, anonymous, crash + feature-usage only (stack traces with PII scrubbing; counter-style command/file metrics). Drawing content never leaves the device. **Deferred to post-v1**: v1 ships with zero telemetry. The stance is recorded here so it constrains the eventual implementation.
 - Q: Cross-tab unsaved-changes handling? → A: Single-writer lock via the Web Locks API. The first tab to open a file holds the writer lock; a second tab opens the same file read-only and shows a "Take over editing" affordance. Clicking it prompts the original tab to flush or discard pending edits before the lock transfers.
 - Q: Multi-document support? → A: One drawing per tab in v1. Opening another file from File > Open opens a new browser tab carrying that file. No in-tab document tabs and no detached windows in v1; both remain candidates for post-v1.
+- Q: Selection model — select-first only, or dual? → A: Dual. Commands MAY be invoked with or without a pre-selection. Each command's prompt sequence handles both cases consistently. Trim, hatch, and similar boundary-driven commands explicitly need the post-selection path; pinning select-first only would break them.
+- Q: Trim / Extend / Fillet interaction model? → A: Dual mode. (1) Quick mode (default when the user presses Enter at the "Select edges/boundaries" prompt): hover an entity, see the proposed cut or extension in red, click to commit; the cut/extend boundary is the first crossing in cursor direction. (2) Classic mode: the user picks cutting edges or extension boundaries first via single-pick, fence, window, crossing, or area drag, and only those edges constrain the operation. The active mode is shown in the command's persistent state panel.
+- Q: Renderer — WebGL2 or WebGPU? → A: WebGPU as the primary renderer; WebGL2 as an automatic fallback for browsers that lack WebGPU at runtime. The scene API and visual output MUST be identical on both. This supersedes the constitution's prior WebGL2-only constraint and is reflected in an updated principle.
 
 ## User Scenarios & Testing
 
@@ -298,10 +301,32 @@ frame time must be ≤ 16 ms on the baseline hardware.
   intersection), and Select All.
 - **FR-005**: Users MUST be able to move, copy, rotate, scale, mirror,
   array (linear and rectangular), trim, extend, offset, and fillet
-  selected entities.
+  selected entities. These commands MUST accept either a pre-selection
+  (selection → command) or a post-selection (command → selection
+  prompt); the prompt sequence MUST behave identically across both
+  paths.
+- **FR-005a**: Trim, Extend, Fillet, and Chamfer MUST support two
+  interaction modes within a single command invocation:
+  (a) **Quick mode** — entered by pressing Enter at the "Select
+  cutting edges / boundaries" prompt (or when no pre-selection
+  exists). Hovering any entity highlights the proposed cut/extend
+  result in red; clicking commits. The implicit boundary is the first
+  crossing along the cursor's direction.
+  (b) **Classic mode** — entered by picking one or more cutting edges
+  or extension boundaries first, via single-pick, fence, window,
+  crossing window, or rectangular drag-area selection. Only the chosen
+  edges constrain the subsequent operations.
+  The command's persistent state panel MUST show which mode is active
+  and how to switch.
 - **FR-006**: Every committed modification MUST be undoable and redoable
   via `Ctrl/Cmd-Z` and `Ctrl/Cmd-Shift-Z`, with no upper bound on undo
   depth within a session (memory permitting).
+- **FR-006a**: Within any multi-step command (polyline vertex picks,
+  array setup, etc.), every individual prompt step MUST be undoable
+  via `Ctrl/Cmd-Z` or a dedicated "U" sub-option without exiting the
+  command. Escape MUST cancel the entire in-progress command without
+  committing partial state. Once the command commits, undo operates on
+  the whole committed unit.
 
 #### Snapping and constraints
 - **FR-007**: The application MUST support these snap types, individually
@@ -309,6 +334,16 @@ frame time must be ≤ 16 ms on the baseline hardware.
   perpendicular, tangent, nearest, parallel, and grid.
 - **FR-008**: Snap markers MUST appear within 50 ms of the cursor
   entering a snap zone and disappear within 50 ms of leaving it.
+- **FR-008a**: When multiple snap candidates are in range simultaneously,
+  the application MUST show **one** marker at a time — the candidate
+  predicted from the cursor's recent motion vector — rendered large
+  and unambiguous, never a cluster. Pressing `Tab` MUST cycle through
+  the other in-range candidates in order of proximity.
+- **FR-008b**: An active snap MUST display its measurement inline near
+  the cursor: distance from the previous point and angle in the
+  drawing's units and precision. Soft snaps (alignment guides,
+  extensions) MUST be visually distinct from hard snaps (endpoint,
+  intersection); hard snaps commit on click, soft snaps are advisory.
 - **FR-009**: Users MUST be able to constrain cursor movement to ortho
   (horizontal/vertical) and polar (configurable angle increments) modes,
   toggled by key (default `F8`, `F10`) or the status bar.
@@ -377,6 +412,24 @@ frame time must be ≤ 16 ms on the baseline hardware.
   the palette, and (for the common cases) a toolbar or context menu.
 - **FR-025**: Keyboard bindings MUST be user-configurable and the
   configuration MUST persist locally.
+
+#### Direct manipulation (grips)
+- **FR-025a**: Selected entities MUST expose grips at meaningful points
+  (line endpoints/midpoints, polyline vertices, arc endpoints/center,
+  circle quadrants/center, dimension definition points, text anchor).
+  Dragging a grip MUST modify the entity directly; the operation MUST
+  honor active snaps and ortho/polar constraints and MUST be undoable
+  like any other commit.
+- **FR-025b**: Hovering a grip MUST surface a contextual mini-toolbar
+  with operations appropriate to that grip. Minimum v1 surface:
+  - Polyline vertex grip: convert segment to arc, convert segment to
+    line, add vertex, remove vertex.
+  - Arc midpoint grip: change radius, reverse direction.
+  - Line endpoint grip: stretch (default — no toolbar needed).
+  - Dimension definition-point grip: re-pick definition point,
+    flip extension side.
+  The toolbar MUST be reachable by keyboard (Alt-key cycles options at
+  the active grip).
 
 #### Visual design and accessibility
 - **FR-026**: The application MUST support light and dark themes that
@@ -460,6 +513,30 @@ frame time must be ≤ 16 ms on the baseline hardware.
 - **SC-008**: Every shipped command has at least one acceptance scenario
   covered by an automated end-to-end test.
 
+## Future Directions (post-v1, recorded so v1 architecture leaves room)
+
+These are deliberately **out of scope for v1** but the v1 data model,
+command bus, and renderer MUST not preclude them. They are listed here
+so plan.md and future specs inherit the direction.
+
+- **Components, not blocks**: blocks/inserts return as typed-prop
+  components (Door, Column, Window) with parametric instances and a
+  library browser. Implies the entity model leaves a slot for typed
+  instances pointing at a definition with bound parameters.
+- **Constraints by default**: dimensions become geometric constraints
+  in addition to annotations; locking a dimension drives geometry.
+- **Live multiplayer (CRDT)**: cursors, selection sync, comments
+  anchored to geometry. Requires the command bus to be serializable
+  per-operation, not just per-commit (already the case under FR-006a).
+- **Natural-language command input**: an alternate input mode that
+  emits the same commands as the palette. Requires command names,
+  parameters, and intent to be addressable from outside the UI.
+- **Smart components on placement** (a door placed on a wall
+  auto-rotates and cuts the opening).
+- **Versioned URL references** replacing xrefs.
+- **Per-viewport layer overrides and annotative scales** when paper
+  space arrives.
+
 ## Assumptions
 
 - The v1 target user is a drafter or engineer who already understands
@@ -487,4 +564,6 @@ frame time must be ≤ 16 ms on the baseline hardware.
   and detached document windows are out of scope for v1. v1 uses
   one-drawing-per-tab; multi-document UX is a candidate for post-v1.
 - Browser support is the latest two stable versions of Chrome, Edge,
-  Firefox, and Safari at release time.
+  Firefox, and Safari at release time. WebGPU is expected on all four
+  in their current stable channels; on older releases that lack
+  WebGPU, the WebGL2 fallback renderer takes over automatically.

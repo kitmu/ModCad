@@ -39,8 +39,10 @@ The drawing surface MUST sustain 60 fps under the following baseline at
 - Pan, zoom, and selection feedback without dropped frames
 
 Performance budgets are enforced in CI via a deterministic benchmark
-scene. Regressions >10% block merge. WebGL is the default renderer;
-Canvas2D is only allowed for UI chrome and overlays.
+scene. Regressions >10% block merge. WebGPU is the primary renderer;
+WebGL2 is the automatic fallback when WebGPU is unavailable at runtime.
+The same scene API MUST produce visually identical results on both
+backends. Canvas2D is only allowed for UI chrome and overlays.
 
 ### III. Spec-Driven Development (NON-NEGOTIABLE)
 
@@ -105,8 +107,11 @@ locked feature in the v1 scope.
 
 - **Language**: TypeScript (strict mode, `noUncheckedIndexedAccess` on).
 - **UI**: React 18+ with function components and hooks. State via Zustand.
-- **Renderer**: WebGL2 via a thin wrapper (regl or hand-rolled). Three.js
-  is permitted only for the optional 3D viewport, never for 2D drafting.
+- **Renderer**: WebGPU primary, WebGL2 fallback. Both sit behind a
+  single thin scene-graph wrapper so the rest of the app does not
+  branch on backend. The WebGL2 fallback path is exercised in CI on
+  every PR. Three.js is permitted only for the optional 3D viewport,
+  never for 2D drafting.
 - **Build**: Vite. Node 20+ for tooling.
 - **Styling**: Tailwind CSS + shadcn/ui primitives. No CSS-in-JS runtime.
 - **Geometry**: hand-rolled kernel in `packages/geometry/`. Third-party
@@ -156,4 +161,10 @@ amended in the same PR.
 - **Review cadence**: revisit quarterly. Drop principles that are no
   longer enforced. Tighten principles that have produced bugs.
 
-**Version**: 0.1.0 | **Ratified**: 2026-05-12 | **Last Amended**: 2026-05-12
+**Version**: 0.2.0 | **Ratified**: 2026-05-12 | **Last Amended**: 2026-05-12
+
+<!-- 0.2.0: Renderer changed from "WebGL2 default" to "WebGPU primary,
+WebGL2 fallback" following external CAD-architecture consultation.
+MINOR bump because the change adds a new compatibility constraint (the
+fallback path) rather than redefining a principle. -->
+
