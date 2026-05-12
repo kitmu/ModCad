@@ -18,6 +18,7 @@ import/export, modern UI (command palette, contextual toolbars, dark mode)."
 - Q: PDF export — vector or rasterized? → A: Vector PDF by default; entities that cannot be cleanly vectorized are embedded as raster within the same vector PDF page.
 - Q: Default unit system on a new drawing? → A: Prompt on first launch with a one-time "What units do you draft in?" dialog defaulting to mm; remember the choice. Units are switchable later and overridable per-drawing and globally.
 - Q: Telemetry and privacy stance? → A: Opt-in, anonymous, crash + feature-usage only (stack traces with PII scrubbing; counter-style command/file metrics). Drawing content never leaves the device. **Deferred to post-v1**: v1 ships with zero telemetry. The stance is recorded here so it constrains the eventual implementation.
+- Q: Cross-tab unsaved-changes handling? → A: Single-writer lock via the Web Locks API. The first tab to open a file holds the writer lock; a second tab opens the same file read-only and shows a "Take over editing" affordance. Clicking it prompts the original tab to flush or discard pending edits before the lock transfers.
 
 ## User Scenarios & Testing
 
@@ -261,9 +262,14 @@ frame time must be ≤ 16 ms on the baseline hardware.
   hint.
 - Drawing contains entities with coordinates exceeding 1e6 units: app
   warns but loads; precision degradation is documented.
-- User opens the app in a tab that already has another instance open
-  with unsaved changes: app warns about cross-tab conflicts and prevents
-  silent overwrites.
+- User opens the same drawing in a second tab while the first holds
+  unsaved changes: the second tab opens read-only and shows a "Take
+  over editing" button. Clicking it asks the first tab (via a
+  cross-tab message) to flush pending edits or discard them; on
+  confirmation, the writer lock transfers to the second tab and the
+  first becomes read-only. If the first tab is closed or unresponsive,
+  the lock can be force-transferred after a short timeout with an
+  explicit confirmation.
 - User imports a DXF that references missing fonts: text entities render
   in a fallback font with a one-time warning; fallback choice is
   configurable.
@@ -388,6 +394,14 @@ frame time must be ≤ 16 ms on the baseline hardware.
   browser-local storage at most every 30 seconds while edits are
   pending, and MUST offer to restore on next open if the prior session
   ended without an explicit save.
+- **FR-032**: The application MUST enforce a single-writer model per
+  open drawing across tabs and windows using the Web Locks API. The
+  tab that opens a drawing first holds the writer lock; subsequent
+  tabs opening the same drawing MUST present it read-only and offer a
+  "Take over editing" affordance. Lock transfer MUST coordinate with
+  the holding tab to flush or discard pending edits before releasing
+  the lock; if the holder is unresponsive past a short timeout, the
+  user MUST be able to force-transfer with an explicit confirmation.
 
 ### Key Entities
 
