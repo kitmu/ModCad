@@ -16,6 +16,7 @@ import/export, modern UI (command palette, contextual toolbars, dark mode)."
 ### Session 2026-05-12
 
 - Q: PDF export — vector or rasterized? → A: Vector PDF by default; entities that cannot be cleanly vectorized are embedded as raster within the same vector PDF page.
+- Q: Default unit system on a new drawing? → A: Prompt on first launch with a one-time "What units do you draft in?" dialog defaulting to mm; remember the choice. Units are switchable later and overridable per-drawing and globally.
 
 ## User Scenarios & Testing
 
@@ -323,6 +324,15 @@ frame time must be ≤ 16 ms on the baseline hardware.
 - **FR-015**: The application MUST support unit systems for millimeters,
   centimeters, meters, inches, and feet, with user-configurable
   precision (0–6 decimal places or fractional inches).
+- **FR-015a**: On first launch (no prior preference), the application
+  MUST present a one-time "What units do you draft in?" modal with
+  millimeters preselected. The chosen value MUST persist as the user's
+  global default unit for all future new drawings.
+- **FR-015b**: The default unit MUST be overridable in two scopes: a
+  per-drawing setting that travels with the file, and a per-user
+  global default reachable from settings. Changing units never silently
+  rescales geometry; coordinates retain their numeric values and only
+  their display representation changes.
 
 #### Files and interoperability
 - **FR-016**: Users MUST be able to save the current drawing to a
