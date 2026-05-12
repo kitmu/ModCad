@@ -17,6 +17,7 @@ import/export, modern UI (command palette, contextual toolbars, dark mode)."
 
 - Q: PDF export — vector or rasterized? → A: Vector PDF by default; entities that cannot be cleanly vectorized are embedded as raster within the same vector PDF page.
 - Q: Default unit system on a new drawing? → A: Prompt on first launch with a one-time "What units do you draft in?" dialog defaulting to mm; remember the choice. Units are switchable later and overridable per-drawing and globally.
+- Q: Telemetry and privacy stance? → A: Opt-in, anonymous, crash + feature-usage only (stack traces with PII scrubbing; counter-style command/file metrics). Drawing content never leaves the device. **Deferred to post-v1**: v1 ships with zero telemetry. The stance is recorded here so it constrains the eventual implementation.
 
 ## User Scenarios & Testing
 
@@ -429,8 +430,11 @@ frame time must be ≤ 16 ms on the baseline hardware.
   is under 2 seconds on a baseline 50 Mbit connection; warm load is
   under 500 ms.
 - **SC-006**: Crash rate (defined as an unhandled exception that
-  reaches the canvas error boundary) is below 0.1% of sessions in
-  production telemetry.
+  reaches the canvas error boundary) is below 0.1% of sessions as
+  measured across the full Playwright e2e suite and a 4-hour dogfood
+  session on the 50k-entity benchmark. Production-telemetry-based
+  measurement is deferred to a post-v1 release when opt-in telemetry
+  ships (see Clarifications, 2026-05-12).
 - **SC-007**: Of users who complete the introductory video, 80%
   successfully save a drawing within their first session.
 - **SC-008**: Every shipped command has at least one acceptance scenario
@@ -451,6 +455,10 @@ frame time must be ≤ 16 ms on the baseline hardware.
 - Mobile/touch support is out of scope for v1; the layout assumes a
   pointer and a keyboard. Tablet stylus is best effort.
 - No user account or cloud sync ships in v1. Local files only.
+- No telemetry, analytics, or remote logging ships in v1. The future
+  stance (opt-in, anonymous, crash + feature-usage only, drawing
+  content never leaves the device) is recorded in Clarifications and
+  will be revisited in a post-v1 spec.
 - Plot/print fidelity is limited to "what you see on screen at print
   scale"; advanced paper-space layouts are deferred.
 - Hatching, blocks/inserts with attributes, table entities, and 3D are
