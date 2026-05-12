@@ -19,6 +19,7 @@ import/export, modern UI (command palette, contextual toolbars, dark mode)."
 - Q: Default unit system on a new drawing? → A: Prompt on first launch with a one-time "What units do you draft in?" dialog defaulting to mm; remember the choice. Units are switchable later and overridable per-drawing and globally.
 - Q: Telemetry and privacy stance? → A: Opt-in, anonymous, crash + feature-usage only (stack traces with PII scrubbing; counter-style command/file metrics). Drawing content never leaves the device. **Deferred to post-v1**: v1 ships with zero telemetry. The stance is recorded here so it constrains the eventual implementation.
 - Q: Cross-tab unsaved-changes handling? → A: Single-writer lock via the Web Locks API. The first tab to open a file holds the writer lock; a second tab opens the same file read-only and shows a "Take over editing" affordance. Clicking it prompts the original tab to flush or discard pending edits before the lock transfers.
+- Q: Multi-document support? → A: One drawing per tab in v1. Opening another file from File > Open opens a new browser tab carrying that file. No in-tab document tabs and no detached windows in v1; both remain candidates for post-v1.
 
 ## User Scenarios & Testing
 
@@ -402,6 +403,11 @@ frame time must be ≤ 16 ms on the baseline hardware.
   the holding tab to flush or discard pending edits before releasing
   the lock; if the holder is unresponsive past a short timeout, the
   user MUST be able to force-transfer with an explicit confirmation.
+- **FR-033**: Each browser tab MUST host exactly one drawing. The File
+  > Open and File > New commands MUST open the target file or new
+  drawing in a new browser tab, leaving the originating tab's state
+  untouched. In-tab document tabs and detached document windows are
+  explicitly out of scope for v1.
 
 ### Key Entities
 
@@ -477,5 +483,8 @@ frame time must be ≤ 16 ms on the baseline hardware.
   scale"; advanced paper-space layouts are deferred.
 - Hatching, blocks/inserts with attributes, table entities, and 3D are
   explicit non-goals for v1; the data model leaves room for them.
+- Multi-document workflows in a single tab (a tab strip across the top)
+  and detached document windows are out of scope for v1. v1 uses
+  one-drawing-per-tab; multi-document UX is a candidate for post-v1.
 - Browser support is the latest two stable versions of Chrome, Edge,
   Firefox, and Safari at release time.

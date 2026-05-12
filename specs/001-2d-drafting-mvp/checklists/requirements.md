@@ -34,5 +34,17 @@ proceeding to planning
 
 ## Notes
 
-The spec is ready for `/speckit.clarify` (optional) and `/speckit.plan`.
-Tech stack decisions are deferred to plan.md per the constitution.
+The spec is ready for `/speckit.plan`. Tech stack decisions are deferred
+to plan.md per the constitution.
+
+### Clarifications completed (Session 2026-05-12)
+
+1. PDF export — vector-first with raster fallback for unsupported entities.
+2. Default units — prompt on first launch (default mm), persisted as
+   global default, overridable per-drawing and globally.
+3. Telemetry — deferred to post-v1; v1 ships with zero telemetry.
+   Future stance recorded: opt-in, anonymous, crash + feature-usage only.
+4. Cross-tab unsaved changes — Web Locks API single-writer with
+   "Take over editing" affordance and force-transfer timeout.
+5. Multi-document — one drawing per tab in v1; in-tab tabs and detached
+   windows deferred to post-v1.
