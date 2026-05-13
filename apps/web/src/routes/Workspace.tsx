@@ -17,6 +17,8 @@ import { PropertiesPanel } from "../panels/PropertiesPanel.js";
 import { DrawingProperties } from "../panels/DrawingProperties.js";
 import { NotificationsToaster } from "../panels/NotificationsToaster.js";
 import { installDevApi } from "../devApi.js";
+import { Grips } from "../grips/Grips.js";
+import { HistoryPanel } from "../panels/HistoryPanel.js";
 
 export function Workspace() {
   const slices = useDrawingSession((s) => s.slices);
@@ -54,6 +56,7 @@ export function Workspace() {
             style={{ width: "100%", height: "100%", display: "block" }}
           />
           <CanvasHost />
+          <Grips />
           <AriaLive />
         </div>
         {sidebarOpen && (
@@ -73,6 +76,7 @@ export function Workspace() {
         )}
       </main>
       <CommandStatePanel />
+      <HistoryPanel />
       <CommandLineBar />
       <CommandPalette />
       <BindingsReference />

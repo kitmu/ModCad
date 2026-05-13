@@ -151,6 +151,18 @@ export const builtinRegistry: CommandRegistry = (() => {
       aliases: ["REDO"],
       summary: "Redo the most recently undone action.",
     },
+    {
+      name: "modify.move",
+      aliases: ["M", "MOVE"],
+      defaultBinding: "M",
+      summary: "Move selected entities.",
+    },
+    {
+      name: "modify.trim",
+      aliases: ["TR", "TRIM"],
+      defaultBinding: "T",
+      summary: "Trim entities to cutting edges (Quick or Classic).",
+    },
   ];
   for (const d of defs) r.register(d);
   return r;

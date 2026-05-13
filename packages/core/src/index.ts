@@ -121,6 +121,12 @@ export {
   bboxOfEllipse,
   bboxOfPoint,
 } from "./geometry/primitives.js";
+export {
+  segIntersect,
+  pointOnSeg,
+  circleIntersect,
+  arcParam,
+} from "./geometry/intersections.js";
 export { SnapEngine } from "./snap/SnapEngine.js";
 export type {
   SnapCandidate,

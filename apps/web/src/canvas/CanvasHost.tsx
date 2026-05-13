@@ -38,9 +38,13 @@ import { ArcTool } from "../tools/ArcTool.js";
 import { PolylineTool } from "../tools/PolylineTool.js";
 import { EllipseTool } from "../tools/EllipseTool.js";
 import { PointTool } from "../tools/PointTool.js";
+import { MoveTool } from "../tools/MoveTool.js";
+import { TrimTool } from "../tools/TrimTool.js";
 import type { Tool, ToolContext } from "../tools/Tool.js";
 import { saveActiveDrawing, openDrawingFromDisk } from "../files/fileActions.js";
 import { commandRouter } from "../palette/commandRouter.js";
+import { createSelectionController } from "./Selection.js";
+import { useViewportState } from "../state/viewportState.js";
 
 interface Camera {
   center: Vec2Type;
@@ -91,6 +95,10 @@ export function CanvasHost(): null {
           zoom: camera.zoom,
           rotation: camera.rotation,
         });
+        useViewportState.getState().set({
+          center: camera.center,
+          zoom: camera.zoom,
+        });
       };
 
       const screenToWorld = (screen: [number, number]): Vec2Type => {
@@ -104,6 +112,14 @@ export function CanvasHost(): null {
       const fitCanvas = (): void => {
         const rect = canvas.getBoundingClientRect();
         renderer.resize(rect.width, rect.height, dpr);
+        useViewportState.getState().set({
+          rect: {
+            left: rect.left,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height,
+          },
+        });
         applyCamera();
         scheduleDraw();
       };
@@ -234,6 +250,9 @@ export function CanvasHost(): null {
       commandRouter.register("draw.polyline", () => activateTool(new PolylineTool()));
       commandRouter.register("draw.ellipse", () => activateTool(new EllipseTool()));
       commandRouter.register("draw.point", () => activateTool(new PointTool()));
+      // US6 modify tools.
+      commandRouter.register("modify.move", () => activateTool(new MoveTool()));
+      commandRouter.register("modify.trim", () => activateTool(new TrimTool()));
       commandRouter.register("view.fit", () => fitDrawing());
       commandRouter.register("file.new", () => {
         useDrawingSession.getState().openNew();
@@ -248,6 +267,13 @@ export function CanvasHost(): null {
         void saveActiveDrawing();
       });
 
+      const selectionController = createSelectionController({
+        getDrawing: () => {
+          const { slices, activeId } = useDrawingSession.getState();
+          return slices.find((s) => s.id === activeId)?.drawing ?? null;
+        },
+      });
+
       const handleGlobalKey = (e: KeyboardEvent): void => {
         const target = e.target as HTMLElement | null;
         if (
@@ -260,6 +286,17 @@ export function CanvasHost(): null {
         }
         // Tool first (it might consume Escape).
         if (activeTool) activeTool.onKeydown(e);
+        // Selection-level keys: only when no tool is active.
+        if (!activeTool) {
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+            e.preventDefault();
+            selectionController.selectAll();
+            return;
+          }
+          if (e.key === "Escape") {
+            selectionController.clear();
+          }
+        }
         if (handleOrthoPolarKey(e)) {
           scheduleDraw();
           return;
@@ -294,12 +331,23 @@ export function CanvasHost(): null {
       const isPanGesture = (s: PointerSample): boolean =>
         Boolean(s.buttons & 4) || (s.spaceHeld && Boolean(s.buttons & 1));
 
+      let shiftDown = false;
+      let ctrlDown = false;
+      const trackModifiers = (e: KeyboardEvent): void => {
+        shiftDown = e.shiftKey;
+        ctrlDown = e.ctrlKey || e.metaKey;
+      };
+
       const offDown = pointer.onPointerDownEvt((s) => {
         if (s.button === 1 || (s.spaceHeld && s.button === 0)) {
           panLast = s.screen;
           return;
         }
-        activeTool?.onPointerDown(s);
+        if (activeTool) {
+          activeTool.onPointerDown(s);
+        } else {
+          selectionController.onPointerDown(s, shiftDown, ctrlDown);
+        }
       });
       const offMove = pointer.onPointerMoveEvt((s) => {
         if (isPanGesture(s)) {
@@ -317,11 +365,20 @@ export function CanvasHost(): null {
           return;
         }
         panLast = null;
-        activeTool?.onPointerMove(s);
+        if (activeTool) {
+          activeTool.onPointerMove(s);
+        } else {
+          selectionController.onPointerMove(s);
+        }
       });
-      const offUp = pointer.onPointerUpEvt(() => {
+      const offUp = pointer.onPointerUpEvt((s) => {
         panLast = null;
+        if (!activeTool) {
+          selectionController.onPointerUp(s, shiftDown, ctrlDown);
+        }
       });
+      window.addEventListener("keydown", trackModifiers);
+      window.addEventListener("keyup", trackModifiers);
       const offKey = pointer.onKeyDownEvt(handleGlobalKey);
 
       const onWheel = (e: WheelEvent): void => {
@@ -351,6 +408,8 @@ export function CanvasHost(): null {
         offMove();
         offUp();
         offKey();
+        window.removeEventListener("keydown", trackModifiers);
+        window.removeEventListener("keyup", trackModifiers);
         canvas.removeEventListener("wheel", onWheel);
         ro.disconnect();
         unsubStore();
