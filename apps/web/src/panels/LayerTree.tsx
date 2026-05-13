@@ -12,6 +12,7 @@
 //     frozen or is "0" the menu disables Delete with an explanatory
 //     tooltip (FR-012).
 import { useMemo, useState } from "react";
+import { FormattedMessage, useIntl } from "react-intl";
 import {
   addLayerCommand,
   removeLayerCommand,
@@ -34,6 +35,17 @@ import { notify } from "../state/notifications.js";
 
 const DEFAULT_NEW_LAYER_COLOR = { r: 1, g: 1, b: 1, a: 1 };
 
+// Decorative chrome glyphs. They're presentational (the surrounding
+// element exposes the accessible name via aria-label); aliasing them
+// here keeps the JSX free of literal-string-in-JSX lint flags while
+// still rendering the same characters.
+const ADD_GLYPH = "+";
+const EYE_GLYPH = "\u{1F441}"; // 👁
+const DASH_GLYPH = "—";
+const LOCK_GLYPH = "\u{1F512}"; // 🔒
+const UNLOCK_GLYPH = "\u{1F513}"; // 🔓
+const STAR_GLYPH = "★";
+
 interface ContextMenu {
   layerId: Id;
   x: number;
@@ -55,6 +67,9 @@ export function LayerTree(): JSX.Element {
   const active = slices.find((s) => s.id === activeId);
   const drawing: Drawing | null = active?.drawing ?? null;
 
+  const intl = useIntl();
+  const t = (id: string, values?: Record<string, string>): string =>
+    intl.formatMessage({ id }, values);
   const [filter, setFilter] = useState("");
   const [menu, setMenu] = useState<ContextMenu | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialog | null>(null);
@@ -79,8 +94,7 @@ export function LayerTree(): JSX.Element {
   if (!drawing) {
     return (
       <div data-testid="layer-tree" style={{ padding: 8, fontSize: 12 }}>
-        {/* TODO(T046): i18n */}
-        No drawing open.
+        <FormattedMessage id="layers.empty" defaultMessage="No drawing open." />
       </div>
     );
   }
@@ -135,16 +149,22 @@ export function LayerTree(): JSX.Element {
       <div style={{ display: "flex", gap: 4 }}>
         <input
           data-testid="layer-filter"
-          placeholder="filter…"
+          placeholder={t("layers.filter.placeholder")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           style={{ flex: 1 }}
+          aria-label={t("layers.filter.placeholder")}
         />
-        <button data-testid="layer-new" onClick={onNewLayer} title="New layer">
-          +
+        <button
+          data-testid="layer-new"
+          onClick={onNewLayer}
+          title={t("layers.new")}
+          aria-label={t("layers.new")}
+        >
+          {ADD_GLYPH}
         </button>
       </div>
-      <ul role="listbox" aria-label="Layers" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+      <ul role="listbox" aria-label={t("layers.list.aria")} style={{ listStyle: "none", margin: 0, padding: 0 }}>
         {filteredLayers.map((layer, idx) => {
           const isCurrent = layer.id === drawing.currentLayerId;
           const realIdx = drawing.layerOrder.indexOf(layer.id);
@@ -190,7 +210,7 @@ export function LayerTree(): JSX.Element {
               }}
             >
               <button
-                aria-label={`Toggle visibility of ${layer.name}`}
+                aria-label={t("layers.visibility.aria", { name: layer.name })}
                 data-testid={`layer-visible-${layer.name}`}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -204,12 +224,12 @@ export function LayerTree(): JSX.Element {
                   );
                 }}
                 style={{ width: 18 }}
-                title={layer.visible ? "Hide" : "Show"}
+                title={t(layer.visible ? "layers.tooltip.hide" : "layers.tooltip.show")}
               >
-                {layer.visible ? "👁" : "—"}
+                {layer.visible ? EYE_GLYPH : DASH_GLYPH}
               </button>
               <button
-                aria-label={`Toggle lock of ${layer.name}`}
+                aria-label={t("layers.lock.aria", { name: layer.name })}
                 data-testid={`layer-lock-${layer.name}`}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -223,9 +243,9 @@ export function LayerTree(): JSX.Element {
                   );
                 }}
                 style={{ width: 18 }}
-                title={layer.locked ? "Unlock" : "Lock"}
+                title={t(layer.locked ? "layers.tooltip.unlock" : "layers.tooltip.lock")}
               >
-                {layer.locked ? "🔒" : "🔓"}
+                {layer.locked ? LOCK_GLYPH : UNLOCK_GLYPH}
               </button>
               <span
                 aria-hidden
@@ -267,10 +287,10 @@ export function LayerTree(): JSX.Element {
               {isCurrent && (
                 <span
                   data-testid={`layer-current-${layer.name}`}
-                  title="Current layer"
-                  aria-label="Current layer"
+                  title={t("layers.current")}
+                  aria-label={t("layers.current")}
                 >
-                  ★
+                  {STAR_GLYPH}
                 </span>
               )}
               {/* idx is the filtered index, unused but referenced to silence lint */}
@@ -285,10 +305,10 @@ export function LayerTree(): JSX.Element {
         const deletable = canDelete(target);
         const deleteTitle = !deletable
           ? target.locked
-            ? "Unlock layer first"
+            ? t("layers.delete.unlockFirst")
             : target.frozen
-              ? "Thaw layer first"
-              : "Default layer cannot be deleted"
+              ? t("layers.delete.thawFirst")
+              : t("layers.delete.defaultLayer")
           : "";
         return (
           <div
@@ -317,7 +337,7 @@ export function LayerTree(): JSX.Element {
                 setMenu(null);
               }}
             >
-              Set current
+              <FormattedMessage id="layers.menu.setCurrent" defaultMessage="Set current" />
             </button>
             <button
               onClick={() => {
@@ -326,7 +346,7 @@ export function LayerTree(): JSX.Element {
                 setMenu(null);
               }}
             >
-              Rename
+              <FormattedMessage id="layers.menu.rename" defaultMessage="Rename" />
             </button>
             <button
               onClick={() => {
@@ -341,7 +361,10 @@ export function LayerTree(): JSX.Element {
                 setMenu(null);
               }}
             >
-              {target.locked ? "Unlock" : "Lock"}
+              <FormattedMessage
+                id={target.locked ? "layers.menu.unlock" : "layers.menu.lock"}
+                defaultMessage={target.locked ? "Unlock" : "Lock"}
+              />
             </button>
             <button
               onClick={() => {
@@ -356,7 +379,10 @@ export function LayerTree(): JSX.Element {
                 setMenu(null);
               }}
             >
-              {target.visible ? "Hide" : "Show"}
+              <FormattedMessage
+                id={target.visible ? "layers.menu.hide" : "layers.menu.show"}
+                defaultMessage={target.visible ? "Hide" : "Show"}
+              />
             </button>
             <button
               onClick={() => {
@@ -364,7 +390,7 @@ export function LayerTree(): JSX.Element {
                 setMenu(null);
               }}
             >
-              Color…
+              <FormattedMessage id="layers.menu.color" defaultMessage="Color…" />
             </button>
             <button
               data-testid={`layer-delete-${target.name}`}
@@ -376,7 +402,7 @@ export function LayerTree(): JSX.Element {
                 setMenu(null);
               }}
             >
-              Delete…
+              <FormattedMessage id="layers.menu.delete" defaultMessage="Delete…" />
             </button>
           </div>
         );
@@ -400,7 +426,13 @@ export function LayerTree(): JSX.Element {
               zIndex: 11,
             }}
           >
-            <div>Reassign entities of "{target.name}" to:</div>
+            <div>
+              <FormattedMessage
+                id="layers.delete.reassign"
+                defaultMessage='Reassign entities of "{name}" to:'
+                values={{ name: target.name }}
+              />
+            </div>
             <select
               data-testid="layer-delete-target"
               defaultValue={candidates[0]?.id}
@@ -414,7 +446,9 @@ export function LayerTree(): JSX.Element {
               ))}
             </select>
             <div style={{ marginTop: 8, display: "flex", gap: 4, justifyContent: "flex-end" }}>
-              <button onClick={() => setDeleteDialog(null)}>Cancel</button>
+              <button onClick={() => setDeleteDialog(null)}>
+                <FormattedMessage id="layers.delete.cancel" defaultMessage="Cancel" />
+              </button>
               <button
                 data-testid="layer-delete-confirm"
                 onClick={() => {
@@ -434,7 +468,7 @@ export function LayerTree(): JSX.Element {
                   setDeleteDialog(null);
                 }}
               >
-                Delete
+                <FormattedMessage id="layers.delete.confirm" defaultMessage="Delete" />
               </button>
             </div>
           </div>
@@ -467,7 +501,9 @@ export function LayerTree(): JSX.Element {
               }}
             />
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
-              <button onClick={() => setColorEditor(null)}>Close</button>
+              <button onClick={() => setColorEditor(null)}>
+                <FormattedMessage id="layers.color.close" defaultMessage="Close" />
+              </button>
             </div>
           </div>
         );

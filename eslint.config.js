@@ -8,6 +8,7 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import boundaries from "eslint-plugin-boundaries";
+import formatjs from "eslint-plugin-formatjs";
 
 export default [
   js.configs.recommended,
@@ -44,10 +45,34 @@ export default [
     },
   },
   {
-    files: ["**/*.test.ts", "**/*.bench.ts", "**/test/**/*.ts"],
+    // T122: enforce that user-visible chrome strings flow through the
+    // react-intl pipeline (FR-029). The rule only fires on JSX in the
+    // web app; non-component code uses the `t()` helper which is a
+    // plain function call and is not policed here.
+    files: ["apps/web/src/**/*.tsx"],
+    plugins: { formatjs },
+    rules: {
+      "formatjs/no-literal-string-in-jsx": "error",
+    },
+  },
+  {
+    // Files swept later — the rule is hard to satisfy for canvas
+    // overlays / dev hooks where every string is a debug label. Each
+    // entry has a tracking note in the file header.
+    files: [
+      "apps/web/src/canvas/**/*.tsx",
+      "apps/web/src/devApi.ts",
+      "apps/web/src/i18n/**/*.tsx",
+      "apps/web/src/i18n/**/*.ts",
+    ],
+    rules: { "formatjs/no-literal-string-in-jsx": "off" },
+  },
+  {
+    files: ["**/*.test.ts", "**/*.test.tsx", "**/*.bench.ts", "**/test/**/*.ts"],
     rules: {
       "no-console": "off",
       "@typescript-eslint/no-explicit-any": "off",
+      "formatjs/no-literal-string-in-jsx": "off",
     },
   },
   {

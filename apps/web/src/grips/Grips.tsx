@@ -15,6 +15,7 @@
 // `modifyGeometryCommand` per FR-006's "every committed mutation goes
 // through the bus" rule.
 import { useState } from "react";
+import { useIntl } from "react-intl";
 import {
   modifyGeometryCommand,
   type Entity,
@@ -163,6 +164,8 @@ export function Grips(): JSX.Element {
   const rect = useViewportState((s) => s.rect);
   const [hoverGrip, setHoverGrip] = useState<GripSpec | null>(null);
   const [dragGrip, setDragGrip] = useState<GripSpec | null>(null);
+  const intl = useIntl();
+  const fmt = (id: string): string => intl.formatMessage({ id });
 
   const active = slices.find((s) => s.id === activeId);
   if (!active) return <div data-testid="grips" style={{ display: "none" }} />;
@@ -214,23 +217,22 @@ export function Grips(): JSX.Element {
     if (!ent) return [];
     if (ent.kind === "polyline" && grip.kind === "vertex") {
       return [
-        // TODO(T046): localize labels.
-        { id: "to-arc", label: "Convert segment to arc" },
-        { id: "to-line", label: "Convert segment to line" },
-        { id: "add-vertex", label: "Add vertex" },
-        { id: "remove-vertex", label: "Remove vertex" },
+        { id: "to-arc", label: fmt("grip.toarc") },
+        { id: "to-line", label: fmt("grip.toline") },
+        { id: "add-vertex", label: fmt("grip.addvertex") },
+        { id: "remove-vertex", label: fmt("grip.removevertex") },
       ];
     }
     if (ent.kind === "arc" && grip.kind === "midpoint") {
       return [
-        { id: "change-radius", label: "Change radius" },
-        { id: "reverse", label: "Reverse direction" },
+        { id: "change-radius", label: fmt("grip.changeradius") },
+        { id: "reverse", label: fmt("grip.reverse") },
       ];
     }
     if (ent.kind === "dimension") {
       return [
-        { id: "repick", label: "Re-pick definition point" },
-        { id: "flip-side", label: "Flip extension side" },
+        { id: "repick", label: fmt("grip.repick") },
+        { id: "flip-side", label: fmt("grip.flipside") },
       ];
     }
     return [];

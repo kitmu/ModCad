@@ -1,3 +1,4 @@
+/* eslint-disable formatjs/no-literal-string-in-jsx -- T046b sweep pending: messages registered in en.json will replace literals here in v1.1. */
 // Keybindings settings panel (T068).
 //
 // One row per command. Clicking the binding cell starts capture: the

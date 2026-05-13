@@ -2,6 +2,7 @@
 // Save As / Recent. The Recent submenu reads from IndexedDB once T108
 // (autosave restore) lands its handle cache; for US1 it stays empty.
 import { useState } from "react";
+import { FormattedMessage, useIntl } from "react-intl";
 import {
   newDrawing,
   openDrawingFromDisk,
@@ -10,9 +11,78 @@ import {
 } from "./fileActions.js";
 import { ExportDialog } from "./ExportDialog.js";
 
+interface MenuEntry {
+  /** Stable id used both as the React key and the data-testid suffix. */
+  testid: string;
+  /** Message id in en.json. */
+  messageId: string;
+  /** English copy mirrored as defaultMessage for the formatjs extractor. */
+  defaultMessage: string;
+  onSelect: () => void;
+}
+
 export function FileMenu(): JSX.Element {
+  const intl = useIntl();
   const [open, setOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+
+  const entries: MenuEntry[] = [
+    {
+      testid: "new",
+      messageId: "file.menu.new",
+      defaultMessage: "New",
+      onSelect: () => {
+        setOpen(false);
+        newDrawing();
+      },
+    },
+    {
+      testid: "open",
+      messageId: "file.menu.open",
+      defaultMessage: "Open…",
+      onSelect: () => {
+        setOpen(false);
+        void openDrawingFromDisk();
+      },
+    },
+    {
+      testid: "importdxf",
+      messageId: "file.menu.importDxf",
+      defaultMessage: "Import DXF…",
+      onSelect: () => {
+        setOpen(false);
+        void importDxfFromDisk();
+      },
+    },
+    {
+      testid: "save",
+      messageId: "file.menu.save",
+      defaultMessage: "Save",
+      onSelect: () => {
+        setOpen(false);
+        void saveActiveDrawing();
+      },
+    },
+    {
+      testid: "saveas",
+      messageId: "file.menu.saveAs",
+      defaultMessage: "Save As…",
+      onSelect: () => {
+        setOpen(false);
+        void saveActiveDrawing();
+      },
+    },
+    {
+      testid: "export",
+      messageId: "file.menu.export",
+      defaultMessage: "Export…",
+      onSelect: () => {
+        setOpen(false);
+        setExportOpen(true);
+      },
+    },
+  ];
+
   return (
     <div
       data-testid="file-menu"
@@ -22,9 +92,10 @@ export function FileMenu(): JSX.Element {
         data-testid="file-menu-button"
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label={intl.formatMessage({ id: "file.menu.button.aria" })}
         onClick={() => setOpen((v) => !v)}
       >
-        File
+        <FormattedMessage id="file.menu.title" defaultMessage="File" />
       </button>
       {open ? (
         <ul
@@ -42,54 +113,21 @@ export function FileMenu(): JSX.Element {
             zIndex: 10,
           }}
         >
-          <MenuItem
-            label="New"
-            onClick={() => {
-              setOpen(false);
-              newDrawing();
-            }}
-          />
-          <MenuItem
-            label="Open…"
-            onClick={() => {
-              setOpen(false);
-              void openDrawingFromDisk();
-            }}
-          />
-          <MenuItem
-            label="Import DXF…"
-            onClick={() => {
-              setOpen(false);
-              void importDxfFromDisk();
-            }}
-          />
-          <MenuItem
-            label="Save"
-            onClick={() => {
-              setOpen(false);
-              void saveActiveDrawing();
-            }}
-          />
-          <MenuItem
-            label="Save As…"
-            onClick={() => {
-              setOpen(false);
-              void saveActiveDrawing();
-            }}
-          />
-          <MenuItem
-            label="Export…"
-            onClick={() => {
-              setOpen(false);
-              setExportOpen(true);
-            }}
-          />
+          {entries.map((e) => (
+            <MenuItem
+              key={e.testid}
+              testid={e.testid}
+              messageId={e.messageId}
+              defaultMessage={e.defaultMessage}
+              onClick={e.onSelect}
+            />
+          ))}
           <li
             role="menuitem"
             data-testid="file-menu-recent"
             style={{ padding: "4px 8px", opacity: 0.5 }}
           >
-            Recent (empty)
+            <FormattedMessage id="file.menu.recentEmpty" defaultMessage="Recent (empty)" />
           </li>
         </ul>
       ) : null}
@@ -99,17 +137,21 @@ export function FileMenu(): JSX.Element {
 }
 
 function MenuItem({
-  label,
+  testid,
+  messageId,
+  defaultMessage,
   onClick,
 }: {
-  label: string;
+  testid: string;
+  messageId: string;
+  defaultMessage: string;
   onClick: () => void;
 }): JSX.Element {
   return (
     <li role="none">
       <button
         role="menuitem"
-        data-testid={`file-menu-${label.replace(/[\s…]/g, "").toLowerCase()}`}
+        data-testid={`file-menu-${testid}`}
         onClick={onClick}
         style={{
           background: "transparent",
@@ -121,7 +163,7 @@ function MenuItem({
           cursor: "pointer",
         }}
       >
-        {label}
+        <FormattedMessage id={messageId} defaultMessage={defaultMessage} />
       </button>
     </li>
   );

@@ -1,0 +1,39 @@
+{
+  "file.menu.button.aria": {
+  },
+  "file.menu.recentEmpty": {
+    "defaultMessage": "Recent (empty)"
+  },
+  "file.menu.title": {
+    "defaultMessage": "File"
+  },
+  "layers.color.close": {
+    "defaultMessage": "Close"
+  },
+  "layers.delete.cancel": {
+    "defaultMessage": "Cancel"
+  },
+  "layers.delete.confirm": {
+    "defaultMessage": "Delete"
+  },
+  "layers.delete.reassign": {
+    "defaultMessage": "Reassign entities of \"{name}\" to:"
+  },
+  "layers.empty": {
+    "defaultMessage": "No drawing open."
+  },
+  "layers.menu.color": {
+    "defaultMessage": "Color…"
+  },
+  "layers.menu.delete": {
+    "defaultMessage": "Delete…"
+  },
+  "layers.menu.rename": {
+    "defaultMessage": "Rename"
+  },
+  "layers.menu.setCurrent": {
+    "defaultMessage": "Set current"
+  },
+  "settings.theme.title": {
+  }
+}

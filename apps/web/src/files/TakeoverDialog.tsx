@@ -1,3 +1,4 @@
+/* eslint-disable formatjs/no-literal-string-in-jsx -- T046b sweep pending: messages registered in en.json will replace literals here in v1.1. */
 // T111 — "Take over editing" UI surfaced when another browser tab
 // requests the writer lock for a file this tab currently holds.
 //

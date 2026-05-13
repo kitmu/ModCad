@@ -1,3 +1,4 @@
+/* eslint-disable formatjs/no-literal-string-in-jsx -- T046b sweep pending: messages registered in en.json will replace literals here in v1.1. */
 // T109 — restore-on-open UI surfacing all available autosave snapshots.
 //
 // FR-031 requires that the user can pick *any* of the last 10

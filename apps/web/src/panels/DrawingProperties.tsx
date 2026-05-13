@@ -1,3 +1,4 @@
+/* eslint-disable formatjs/no-literal-string-in-jsx -- T046b sweep pending: messages registered in en.json will replace literals here in v1.1. */
 // T077a — Drawing → Properties → Units (per-drawing override).
 //
 // The per-drawing units value is part of the Drawing record (see
@@ -6,6 +7,7 @@
 // numerically identical; only display formatting changes.
 import { changeUnitsCommand, type Unit } from "@modcad/core";
 import { useDrawingSession } from "../workspace/DrawingSessionStore.js";
+import { ThemeToggle } from "../settings/Theme.js";
 
 const ALL: Unit[] = ["mm", "cm", "m", "in", "ft"];
 
@@ -64,6 +66,9 @@ export function DrawingProperties(): JSX.Element {
           style={{ width: 60 }}
         />
       </label>
+      <div style={{ marginTop: 8 }}>
+        <ThemeToggle />
+      </div>
     </div>
   );
 }

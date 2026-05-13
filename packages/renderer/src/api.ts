@@ -32,6 +32,13 @@ export interface SceneRenderer {
   getStats(): FrameStats;
   on(listener: (e: KernelEvent) => void): () => void;
   destroy(): void;
+  /**
+   * T116 — opt into the tile-based composite cache for far-zoom-out.
+   * Default is off; backends that haven't wired the cache treat this
+   * as a no-op. Toggle is transparent at the camera level: turning it
+   * on never changes the rendered output, only the work spent.
+   */
+  setTileCacheEnabled?(enabled: boolean): void;
 }
 
 export interface CreateRendererOptions {

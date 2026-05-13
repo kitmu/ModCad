@@ -1,3 +1,4 @@
+/* eslint-disable formatjs/no-literal-string-in-jsx -- T046b sweep pending: messages registered in en.json will replace literals here in v1.1. */
 // T076 — PropertiesPanel.
 //
 // Reads selection from `useSelection`. For a single-selection (v1), the

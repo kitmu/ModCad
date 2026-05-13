@@ -2,9 +2,40 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: light dark;
+/*
+ * T121 — Theme tokens.
+ *
+ * The chrome (palette, panels, dialogs, menus, tabs) reads its
+ * surfaces from CSS custom properties. ThemeRoot toggles
+ * `data-theme="light"` / `data-theme="dark"` on <html> based on the
+ * user's preference (falling back to the OS `prefers-color-scheme`).
+ *
+ * The drawing canvas keeps its own fixed dark background regardless
+ * of chrome theme — it's the drawing surface, not chrome.
+ */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --modcad-bg: #1c1c1c;
+  --modcad-bg-secondary: #181818;
+  --modcad-panel-bg: #1b1b1b;
+  --modcad-fg: #ddd;
+  --modcad-border: #333;
+  --modcad-selection: #234;
 }
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --modcad-bg: #f5f5f5;
+  --modcad-bg-secondary: #ebebeb;
+  --modcad-panel-bg: #fafafa;
+  --modcad-fg: #1a1a1a;
+  --modcad-border: #cfcfcf;
+  --modcad-selection: #cfe2ff;
+}
+
 body {
   margin: 0;
+  background: var(--modcad-bg);
+  color: var(--modcad-fg);
 }

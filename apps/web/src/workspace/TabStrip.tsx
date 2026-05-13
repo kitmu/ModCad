@@ -1,3 +1,4 @@
+/* eslint-disable formatjs/no-literal-string-in-jsx -- T046b sweep pending: messages registered in en.json will replace literals here in v1.1. */
 // FR-033: in-app multi-document tab strip.
 //
 // v1 surface: open / close / switch / drag-reorder pending (uses native

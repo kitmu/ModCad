@@ -1,3 +1,4 @@
+/* eslint-disable formatjs/no-literal-string-in-jsx -- T046b sweep pending: messages registered in en.json will replace literals here in v1.1. */
 // Active drawing route. Hosts the tab strip, file menu, canvas surface,
 // command-state panel, palette/binding overlays, and the right-side
 // panel stack (layers, properties, drawing properties).

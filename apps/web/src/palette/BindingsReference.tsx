@@ -1,3 +1,4 @@
+/* eslint-disable formatjs/no-literal-string-in-jsx -- T046b sweep pending: messages registered in en.json will replace literals here in v1.1. */
 // Read-only bindings reference modal (T068).
 //
 // Opened by pressing `?` from anywhere outside an input. Lists every

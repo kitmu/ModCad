@@ -1,3 +1,4 @@
+/* eslint-disable formatjs/no-literal-string-in-jsx -- T046b sweep pending: messages registered in en.json will replace literals here in v1.1. */
 // FR-019 import warnings surface.
 //
 // `surfaceDxfWarnings` is the one-shot side-effect — call after every

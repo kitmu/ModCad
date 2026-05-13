@@ -1,3 +1,4 @@
+/* eslint-disable formatjs/no-literal-string-in-jsx -- T046b sweep pending: messages registered in en.json will replace literals here in v1.1. */
 // T077a — Settings → Units pane (global default).
 //
 // Per FR-015a/b: switching units never rescales geometry. This pane

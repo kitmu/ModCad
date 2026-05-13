@@ -1,3 +1,4 @@
+/* eslint-disable formatjs/no-literal-string-in-jsx -- T046b sweep pending: messages registered in en.json will replace literals here in v1.1. */
 // US6 T094 — History panel.
 //
 // Surfaces the active slice's undo stack. Each entry shows the command

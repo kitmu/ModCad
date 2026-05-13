@@ -1,0 +1,30 @@
+{
+  "scenes": {
+    "50k": {
+      "scene": "50k",
+      "frameTime": {
+        "p50": 0.519,
+        "p95": 0.592,
+        "max": 3.256
+      },
+      "drawCalls": 2,
+      "peakHeapMb": 38.835,
+      "entityCount": 50000,
+      "averageVisible": 12587
+    },
+    "200k": {
+      "scene": "200k",
+      "frameTime": {
+        "p50": 2.19,
+        "p95": 2.36,
+        "max": 11.935
+      },
+      "drawCalls": 5,
+      "peakHeapMb": 63.141,
+      "entityCount": 200000,
+      "averageVisible": 50349
+    }
+  },
+  "generatedAt": "2026-05-13T06:53:35.563Z",
+  "frames": 600
+}
