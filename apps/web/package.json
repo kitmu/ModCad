@@ -1,0 +1,37 @@
+{
+  "name": "@modcad/web",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:e2e": "playwright test",
+    "bench": "node ../../benchmarks/run.mjs",
+    "i18n:audit": "node ../../tooling/i18n-audit.mjs"
+  },
+  "dependencies": {
+    "@modcad/core": "workspace:*",
+    "@modcad/renderer": "workspace:*",
+    "@modcad/codecs": "workspace:*",
+    "@modcad/ui-kit": "workspace:*",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "zustand": "4.5.5"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.3",
+    "vite": "5.4.21",
+    "@playwright/test": "1.56.1",
+    "@types/node": "20.17.10",
+    "jsdom": "25.0.1",
+    "tailwindcss": "3.4.17",
+    "autoprefixer": "10.4.20",
+    "postcss": "8.4.49"
+  }
+}

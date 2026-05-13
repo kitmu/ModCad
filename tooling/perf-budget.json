@@ -1,0 +1,20 @@
+{
+  "_comment": "Source of truth for performance budgets. CI bench job reads this and fails on regression >10% per constitution Principle II. SC-003: 60 fps on 50k entities. SC-005: cold load <2s, warm <500ms. SC-009: peak heap <400MB on 50k bench.",
+  "version": "0.1.0",
+  "scenes": {
+    "50k": {
+      "panZoomFrameTimeMsP95": 16,
+      "selectionTimeMsP95": 200,
+      "peakHeapMb": 400
+    }
+  },
+  "load": {
+    "coldHtmlToInteractiveMs": 2000,
+    "warmHtmlToInteractiveMs": 500
+  },
+  "bundle": {
+    "initialRouteGzipKb": 600
+  },
+  "regressionThresholdPercent": 10,
+  "_note": "Numbers apply to baseline hardware (Iris Xe / M1, 16 GB RAM, 1080p). Sandbox runs under SwiftShader produce non-representative numbers — see tooling/sandbox-notes.md."
+}

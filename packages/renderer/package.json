@@ -1,0 +1,21 @@
+{
+  "name": "@modcad/renderer",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:parity": "vitest run test/parity.test.ts --passWithNoTests",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@modcad/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@webgpu/types": "0.1.52"
+  }
+}
