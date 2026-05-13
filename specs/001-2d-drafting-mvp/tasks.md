@@ -46,7 +46,12 @@ runs against the same gates.
       thresholds and per-route bundle budgets
 - [ ] **T009** GitHub Actions / CI workflow file at `.github/workflows/ci.yml`
       with jobs: lint, typecheck, unit, integration, e2e, render-parity,
-      bench (the bench job is required-but-allowed-to-warn until Phase 5)
+      bench, cold-load, command-coverage. The bench job is a **hard
+      merge gate from Phase 2 onward** with a generous initial baseline
+      that tightens each phase (constitution Principle II: regressions
+      >10% block merge). The only escape is a PR-title token
+      `[skip-bench]` which auto-creates a follow-up issue and notifies
+      maintainers.
 - [ ] **T010 [P]** Pre-commit / lint-staged hook config at repo root
 - [ ] **T011 [P]** Add `LICENSE`, `CODEOWNERS`, and a one-line
       contributor note in `README.md` pointing at the spec workflow
@@ -101,6 +106,10 @@ story may begin until this phase passes its gates.
 - [ ] **T025 [F]** Implement sub-step support in `CommandBus`
 - [ ] **T026 [F]** Implement `cancel()` (Esc behavior) and ensure
       no draft state leaks on cancel
+- [ ] **T026a [F]** Coverage gate for the command bus: configure
+      `vitest` coverage thresholds for `packages/core/src/commands/**`
+      at 100% lines + 100% branches in `vitest.config.ts`; CI fails
+      below (constitution Principle IV)
 
 ### Snap engine
 
@@ -113,6 +122,10 @@ story may begin until this phase passes its gates.
       (endpoint, midpoint, center, node, intersection, perpendicular,
       tangent, nearest, parallel, grid) under
       `packages/core/src/snap/modes/*.ts`
+- [ ] **T029a [F]** Performance test for snap marker latency at
+      `packages/core/test/perf/snap-latency.test.ts`: drive a 10k-event
+      synthetic cursor trace and assert marker emission ≤ 50 ms p95
+      (FR-008). Wired into the bench CI job as a hard gate.
 
 ### Spatial index
 
@@ -120,6 +133,22 @@ story may begin until this phase passes its gates.
       `packages/core/test/integration/index.test.ts`
 - [ ] **T031 [F]** Implement two-tier index facade (`flatbush` static
       + `rbush` mutable) in `packages/core/src/index/SpatialIndex.ts`
+
+### View, grid, and chrome
+
+- [ ] **T031a [F]** Pan / cursor-anchored zoom / fit commands in
+      `packages/core/src/commands/view/{pan,zoom,fit}.ts`, wired
+      through `apps/web/src/canvas/PointerInput.ts` (middle-mouse
+      drag, space-drag, scroll-wheel zoom anchored to cursor, fit
+      command) (FR-020)
+- [ ] **T031b [F]** `GridLayer` in `packages/renderer/src/scene/GridLayer.ts`
+      with configurable spacing and adaptive subdivisions; grid
+      visibility toggle and grid-snap toggle are independent settings
+      in `DrawingSettings.grid` (FR-021)
+- [ ] **T031c [F]** `Rulers.tsx` chrome at
+      `apps/web/src/canvas/Rulers.tsx` tracking camera zoom and the
+      drawing's current units; tick labels respect precision
+      (FR-022)
 
 ### Renderer abstraction
 
@@ -163,6 +192,13 @@ story may begin until this phase passes its gates.
       scale, fps; `AriaLive.tsx` for selection + command summaries
 - [ ] **T046 [F]** First-run `UnitsDialog.tsx` per FR-015a, defaulting
       to mm, persisting to IndexedDB
+- [ ] **T046a [F]** i18n wrapper set up at `apps/web/src/i18n/` using
+      `@formatjs/intl`: `en.json` message bundle, `<IntlProvider>`
+      mounted at app root, message-extraction script in CI, ESLint
+      rule banning raw string literals in JSX text and `aria-label`
+      attributes. **Every user-facing string must go through this
+      wrapper from this task onward** (constitution Principle V "from
+      day one"; resolves analyze finding C1)
 
 ### Codec scaffolding
 
@@ -216,6 +252,11 @@ hard-reloads, reopens, and sees identical geometry.
       `apps/web/src/canvas/PointerInput.ts`
 - [ ] **T060 [US1]** Command state panel (`CommandStatePanel.tsx`)
       showing current step, valid keystrokes, escape behavior
+- [ ] **T060a [US1]** Ortho / polar toggles (F8 / F10) at
+      `apps/web/src/canvas/OrthoPolar.ts`: state in the store,
+      status-bar control surface, cursor-constraint integration with
+      the snap engine, configurable polar angle increments persisted
+      per drawing (FR-009)
 - [ ] **T061 [US1]** File menu wiring: New, Open, Save, Save As via
       File System Access API with download/upload fallback at
       `apps/web/src/files/fsAccess.ts`
@@ -290,6 +331,12 @@ inheritance; safe delete with reassignment.
       overrides for layer assignment, color, lineweight
 - [ ] **T077 [US3]** Renderer: respect layer visible/locked/frozen
       and per-layer color/lineweight resolution (`byLayer` chain)
+- [ ] **T077a [US3]** Units settings: Settings → Units pane (global
+      default) and Drawing → Properties → Units (per-drawing
+      override) at `apps/web/src/settings/UnitsSettings.tsx` and
+      `apps/web/src/panels/DrawingProperties.tsx`. Per-drawing
+      override is serialized into `.modcad`; global default in
+      IndexedDB (FR-015b)
 
 **Checkpoint**: US3 e2e green; locked layer rejects edits with a
 non-modal notification.
@@ -436,6 +483,11 @@ implemented after the core stories so each can be tested in isolation.
       `window.open` and a session handoff handshake
 - [ ] **T113 [P]** Cross-tab e2e test at
       `apps/web/tests/e2e/cross-tab-locks.spec.ts`
+- [ ] **T113a [P]** Offline-mode verification e2e at
+      `apps/web/tests/e2e/offline.spec.ts`: run the US1 acceptance
+      scenarios with `page.context().setOffline(true)` from cold
+      start; every v1 path must succeed without network (FR-030).
+      Hard CI gate.
 
 ---
 
@@ -451,8 +503,12 @@ fps pan/zoom on the 50k benchmark; 10k entity box-select ≤ 200 ms.
 - [ ] **T114 [P] [US7]** Playwright `us7-large-drawing.spec.ts` that
       loads `benchmarks/scenes/50k.json`, runs a 30 s pan/zoom loop,
       and asserts frame-time percentiles
-- [ ] **T115 [P] [US7]** Bench job in CI that loads the 50k and 200k
-      scenes and writes a `bench-report.json` artifact
+- [ ] **T115 [P] [US7]** Bench CI job hardening — the bench is
+      already a hard merge gate from Phase 2 (T009). This task
+      finalizes the **50k baseline** at SC-003's targets (≤16 ms p95
+      pan/zoom; 10k box-select ≤200 ms) on the canonical hardware
+      profile, writes `bench-report.json` artifacts, and tightens
+      regression threshold to >10% per constitution Principle II.
 
 ### Implementation
 
@@ -467,22 +523,35 @@ fps pan/zoom on the 50k benchmark; 10k entity box-select ≤ 200 ms.
 - [ ] **T120 [US7]** Spatial-index rebuild scheduling tuned via the
       bench report (no thrashing during heavy commit chains)
 
-**Checkpoint**: SC-003 met; CI bench job promoted from warn to fail.
+**Checkpoint**: SC-003 met; final bench thresholds locked.
 
 ---
 
 ## Phase 11: Polish & cross-cutting concerns
 
 - [ ] **T121 [P]** Dark/light theme (FR-026) + OS-preference detection
-- [ ] **T122 [P]** i18n wrapper (`@formatjs/intl`), English `en.json`,
-      message extraction in CI
+- [ ] **T122 [P]** i18n maintenance gate: an `i18n-audit` CI job that
+      fails on extraction drift (a JSX literal slipped past the ESLint
+      rule, or `en.json` is out of sync with extracted messages). The
+      wrapper itself ships in T046a; this task is the long-running
+      hygiene check.
 - [ ] **T123 [P]** WCAG 2.2 AA audit pass on non-canvas UI; remediate
 - [ ] **T124 [P]** Documentation: top-level `CONTRIBUTING.md`,
       `docs/architecture.md` summarizing the seam diagram
 - [ ] **T125 [P]** README screenshot/GIF set
 - [ ] **T126** Bundle-size budget enforcement in CI (per route)
+- [ ] **T126a** Cold/warm load gate: Playwright + Lighthouse spec at
+      `apps/web/tests/e2e/load-perf.spec.ts` asserting cold load
+      HTML→interactive ≤ 2 s on a 50 Mbit throttled profile and warm
+      load ≤ 500 ms once the service-worker cache is primed (SC-005).
+      Hard CI fail on regression.
 - [ ] **T127** Run `quickstart.md` end-to-end on a clean clone as a
       release-readiness check
+- [ ] **T127a** Command-coverage enforcement at
+      `tooling/check-command-coverage.ts`: enumerate registered
+      commands from the `CommandRegistry`, assert at least one
+      Playwright spec references each command's canonical name, fail
+      the build on drift (SC-008).
 
 ---
 

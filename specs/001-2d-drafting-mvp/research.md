@@ -167,6 +167,15 @@ undo stack with a no-op user-visible effect.
 in to site-scale all the time. Rebasing keeps numerical headroom and
 is invisible to user-facing coordinates.
 
+**Precision regime numbers (cross-reference)**:
+- `5×10⁵` units from the current local origin: origin rebase trigger.
+- `1×10⁶` units: constitution's "working area" soft ceiling. The
+  drawing remains usable past it but precision degrades
+  proportionally; we warn at load time when a drawing's bounding box
+  exceeds this value.
+- `~1×10⁷` units: hard double-precision degradation; predicates
+  start reporting wrong-side classifications on near-collinear inputs.
+
 ## i18n
 
 **Decision**: `@formatjs/intl` for message formatting; messages in

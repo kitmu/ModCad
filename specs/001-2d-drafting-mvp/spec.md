@@ -357,7 +357,9 @@ frame time must be ≤ 16 ms on the baseline hardware.
   layer") unless explicitly overridden per entity.
 - **FR-012**: Deleting a non-empty layer MUST require confirmation and
   MUST offer to move its entities to another layer rather than discard
-  them.
+  them. A locked or frozen layer MUST NOT be deletable; the delete UI
+  MUST disable the action with an explanatory tooltip until the layer
+  is unlocked.
 
 #### Dimensions
 - **FR-013**: Users MUST be able to create aligned, linear (horizontal
