@@ -78,6 +78,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: 4.3.3
         version: 4.3.3(vite@5.4.21(@types/node@20.17.10))
+      '@webgpu/types':
+        specifier: 0.1.52
+        version: 0.1.52
       autoprefixer:
         specifier: 10.4.20
         version: 10.4.20(postcss@8.4.49)

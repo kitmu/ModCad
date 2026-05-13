@@ -3,6 +3,8 @@
 // chain (AutoCAD-style). Escape clears the in-flight start.
 import { drawLineCommand, type Id, type LineEntity, type Vec2Type } from "@modcad/core";
 import { useCommandState } from "../state/commandState.js";
+import { useSnapState } from "../state/snapState.js";
+import { snapEndpoint } from "../canvas/snapHelper.js";
 import { clone, type Tool, type ToolContext } from "./Tool.js";
 import type { PointerSample } from "../canvas/PointerInput.js";
 
@@ -20,22 +22,29 @@ export class LineTool implements Tool {
   }
 
   onPointerMove(p: PointerSample): void {
-    this.cursor = p.world;
+    this.cursor = this.applySnap(p.world);
     this.refreshPreview();
   }
 
   onPointerDown(p: PointerSample): void {
     if (p.button !== 0) return; // primary only
+    const target = this.applySnap(p.world);
     if (this.startPoint === null) {
-      this.startPoint = clone(p.world);
+      this.startPoint = clone(target);
       this.setStep("pick-second");
       return;
     }
-    this.ctx.bus.execute(drawLineCommand({ a: this.startPoint, b: clone(p.world) }));
+    this.ctx.bus.execute(drawLineCommand({ a: this.startPoint, b: clone(target) }));
     this.ctx.syncDirty();
     // Chain: re-arm with the just-placed point as the new start.
-    this.startPoint = clone(p.world);
+    this.startPoint = clone(target);
     this.refreshPreview();
+  }
+
+  private applySnap(world: Vec2Type): Vec2Type {
+    const hit = snapEndpoint(world, this.ctx.bus.drawing, 1);
+    useSnapState.getState().set(hit ? hit.point : null);
+    return hit ? hit.point : world;
   }
 
   onKeydown(e: KeyboardEvent): void {

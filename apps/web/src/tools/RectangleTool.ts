@@ -7,6 +7,8 @@ import {
   type Vec2Type,
 } from "@modcad/core";
 import { useCommandState } from "../state/commandState.js";
+import { useSnapState } from "../state/snapState.js";
+import { snapEndpoint } from "../canvas/snapHelper.js";
 import { clone, type Tool, type ToolContext } from "./Tool.js";
 import type { PointerSample } from "../canvas/PointerInput.js";
 
@@ -24,18 +26,19 @@ export class RectangleTool implements Tool {
   }
 
   onPointerMove(p: PointerSample): void {
-    this.cursor = p.world;
+    this.cursor = this.applySnap(p.world);
     this.refreshPreview();
   }
 
   onPointerDown(p: PointerSample): void {
     if (p.button !== 0) return;
+    const target = this.applySnap(p.world);
     if (this.corner === null) {
-      this.corner = clone(p.world);
+      this.corner = clone(target);
       this.setStep("pick-second");
       return;
     }
-    this.ctx.bus.execute(drawRectangleCommand({ a: this.corner, b: clone(p.world) }));
+    this.ctx.bus.execute(drawRectangleCommand({ a: this.corner, b: clone(target) }));
     this.ctx.syncDirty();
     this.corner = null;
     this.ctx.rubberBand.remove(PREVIEW_ID);
@@ -54,6 +57,12 @@ export class RectangleTool implements Tool {
 
   dispose(): void {
     this.ctx?.rubberBand.remove(PREVIEW_ID);
+  }
+
+  private applySnap(world: Vec2Type): Vec2Type {
+    const hit = snapEndpoint(world, this.ctx.bus.drawing, 1);
+    useSnapState.getState().set(hit ? hit.point : null);
+    return hit ? hit.point : world;
   }
 
   private refreshPreview(): void {

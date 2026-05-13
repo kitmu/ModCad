@@ -1,0 +1,368 @@
+// CanvasHost — owns the renderer lifecycle, the camera, the rubber-band
+// transient scene layer, the PointerInput adapter, and the active tool.
+//
+// One CanvasHost is mounted per workspace; switching tabs swaps the
+// active slice underneath without remounting the renderer (avoids GPU
+// context churn on tab-switch — see plan.md cross-cutting decisions).
+//
+// FR-020 covers pan/zoom/fit. Wheel-zoom anchors at the cursor:
+//   newCenter = pivotWorld + (oldCenter - pivotWorld) / zoomDelta
+// so the world point under the cursor stays under the cursor.
+//
+// FR-016 (file menu) is rendered by FileMenu but its keyboard shortcuts
+// (Ctrl-S / Ctrl-O / Ctrl-N) are wired here so the canvas doesn't need
+// focus.
+//
+// PointerEvents-only per Constitution; no mouse/touch handlers anywhere.
+import { useEffect } from "react";
+import {
+  createRenderer,
+  type SceneRenderer,
+} from "@modcad/renderer";
+import {
+  listVisibleEntities,
+  type Drawing,
+  type Entity,
+  type Id,
+  type Vec2Type,
+} from "@modcad/core";
+import { useDrawingSession } from "../workspace/DrawingSessionStore.js";
+import { PointerInput, type PointerSample } from "./PointerInput.js";
+import { RubberBand } from "./RubberBand.js";
+import { handleOrthoPolarKey } from "./OrthoPolar.js";
+import { LineTool } from "../tools/LineTool.js";
+import { RectangleTool } from "../tools/RectangleTool.js";
+import { CircleTool } from "../tools/CircleTool.js";
+import { ArcTool } from "../tools/ArcTool.js";
+import { PolylineTool } from "../tools/PolylineTool.js";
+import { EllipseTool } from "../tools/EllipseTool.js";
+import { PointTool } from "../tools/PointTool.js";
+import type { Tool, ToolContext } from "../tools/Tool.js";
+import { saveActiveDrawing, openDrawingFromDisk } from "../files/fileActions.js";
+
+interface Camera {
+  center: Vec2Type;
+  zoom: number;
+  rotation: number;
+}
+
+// Single-letter shortcuts. Phase 4 palette will own a richer binding
+// map (REC, ARC, etc.) — these are the minimal shortcuts US1 e2e drives.
+const TOOL_SHORTCUTS: Record<string, () => Tool> = {
+  L: () => new LineTool(),
+  R: () => new RectangleTool(),
+  C: () => new CircleTool(),
+  A: () => new ArcTool(),
+  P: () => new PolylineTool(),
+  E: () => new EllipseTool(),
+  O: () => new PointTool(),
+};
+
+export function CanvasHost(): null {
+  useEffect(() => {
+    const canvas = document.getElementById("modcad-canvas") as HTMLCanvasElement | null;
+    if (!canvas) return;
+
+    let cancelled = false;
+    let cleanup: (() => void) | null = null;
+
+    void (async () => {
+      let renderer: SceneRenderer;
+      try {
+        renderer = await createRenderer({ canvas });
+      } catch (err) {
+        // No GPU? Carry on with a noop renderer so input + state still
+        // work (matters for headless e2e and accessibility-style runs).
+        console.error("modcad: renderer init failed; falling back to noop", err);
+        renderer = makeNoopRenderer();
+      }
+      if (cancelled) {
+        renderer.destroy();
+        return;
+      }
+      const rubberBand = new RubberBand();
+      const camera: Camera = { center: [0, 0], zoom: 1, rotation: 0 };
+      let activeTool: Tool | null = null;
+      let panLast: [number, number] | null = null;
+      let drawnIds = new Set<string>();
+      let rafToken = 0;
+
+      const scheduleDraw = (): void => {
+        if (rafToken) return;
+        rafToken = requestAnimationFrame(() => {
+          rafToken = 0;
+          renderer.draw();
+        });
+      };
+
+      const applyCamera = (): void => {
+        renderer.camera({
+          center: camera.center,
+          zoom: camera.zoom,
+          rotation: camera.rotation,
+        });
+      };
+
+      const screenToWorld = (screen: [number, number]): Vec2Type => {
+        const rect = canvas.getBoundingClientRect();
+        const px = screen[0] - rect.width / 2;
+        const py = screen[1] - rect.height / 2;
+        return [camera.center[0] + px / camera.zoom, camera.center[1] - py / camera.zoom];
+      };
+
+      const dpr = window.devicePixelRatio || 1;
+      const fitCanvas = (): void => {
+        const rect = canvas.getBoundingClientRect();
+        renderer.resize(rect.width, rect.height, dpr);
+        applyCamera();
+        scheduleDraw();
+      };
+      const ro = new ResizeObserver(fitCanvas);
+      ro.observe(canvas);
+      fitCanvas();
+
+      const syncEntities = (): void => {
+        const { slices, activeId } = useDrawingSession.getState();
+        const active = slices.find((s) => s.id === activeId);
+        const drawing: Drawing | null = active?.drawing ?? null;
+        const visible: Entity[] = drawing ? listVisibleEntities(drawing) : [];
+        const transient = rubberBand.list();
+        const all = [...visible, ...transient];
+        const nextIds = new Set<string>(all.map((e) => e.id));
+        // Stale removals.
+        const removals: Id[] = [];
+        for (const id of drawnIds) {
+          if (!nextIds.has(id)) removals.push(id as Id);
+        }
+        if (removals.length > 0) renderer.remove(removals);
+        if (all.length > 0) renderer.upsert(all);
+        drawnIds = nextIds;
+        scheduleDraw();
+      };
+
+      const fitDrawing = (): void => {
+        const { slices, activeId } = useDrawingSession.getState();
+        const active = slices.find((s) => s.id === activeId);
+        if (!active) return;
+        const ents = listVisibleEntities(active.drawing);
+        if (ents.length === 0) {
+          camera.center = [0, 0];
+          camera.zoom = 1;
+          camera.rotation = 0;
+          applyCamera();
+          scheduleDraw();
+          return;
+        }
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        const eat = (p: Vec2Type): void => {
+          if (p[0] < minX) minX = p[0];
+          if (p[0] > maxX) maxX = p[0];
+          if (p[1] < minY) minY = p[1];
+          if (p[1] > maxY) maxY = p[1];
+        };
+        for (const e of ents) {
+          switch (e.kind) {
+            case "line":
+              eat(e.a);
+              eat(e.b);
+              break;
+            case "polyline":
+              for (const v of e.vertices) eat(v.p);
+              break;
+            case "circle":
+            case "arc":
+              eat([e.c[0] - e.r, e.c[1] - e.r]);
+              eat([e.c[0] + e.r, e.c[1] + e.r]);
+              break;
+            case "ellipse": {
+              const mag = Math.hypot(e.major[0], e.major[1]);
+              eat([e.c[0] - mag, e.c[1] - mag]);
+              eat([e.c[0] + mag, e.c[1] + mag]);
+              break;
+            }
+            case "point":
+              eat(e.p);
+              break;
+            default:
+              break;
+          }
+        }
+        const rect = canvas.getBoundingClientRect();
+        const w = maxX - minX || 1;
+        const h = maxY - minY || 1;
+        const margin = 0.9;
+        camera.center = [(minX + maxX) / 2, (minY + maxY) / 2];
+        camera.zoom = Math.min((rect.width * margin) / w, (rect.height * margin) / h);
+        camera.rotation = 0;
+        applyCamera();
+        scheduleDraw();
+      };
+
+      const activateTool = (tool: Tool): void => {
+        activeTool?.dispose();
+        const ctx: ToolContext = {
+          get bus() {
+            const { slices, activeId } = useDrawingSession.getState();
+            const sl = slices.find((s) => s.id === activeId);
+            if (!sl) throw new Error("activateTool: no active slice");
+            return sl.bus;
+          },
+          rubberBand,
+          syncDirty: () => {
+            const { activeId, syncFromBus } = useDrawingSession.getState();
+            if (activeId) syncFromBus(activeId);
+          },
+          done: () => {
+            if (activeTool === tool) activeTool = null;
+          },
+        };
+        activeTool = tool;
+        tool.start(ctx);
+      };
+
+      const handleGlobalKey = (e: KeyboardEvent): void => {
+        const target = e.target as HTMLElement | null;
+        if (
+          target &&
+          (target.tagName === "INPUT" ||
+            target.tagName === "TEXTAREA" ||
+            target.isContentEditable)
+        ) {
+          return;
+        }
+        // Tool first (it might consume Escape).
+        if (activeTool) activeTool.onKeydown(e);
+        if (handleOrthoPolarKey(e)) {
+          scheduleDraw();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+          e.preventDefault();
+          fitDrawing();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+          e.preventDefault();
+          void saveActiveDrawing();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") {
+          e.preventDefault();
+          void openDrawingFromDisk();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") {
+          e.preventDefault();
+          useDrawingSession.getState().openNew();
+          return;
+        }
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        const key = e.key.toUpperCase();
+        const ctor = TOOL_SHORTCUTS[key];
+        if (ctor) activateTool(ctor());
+      };
+
+      const pointer = new PointerInput({ canvas, screenToWorld });
+      applyCamera();
+
+      const isPanGesture = (s: PointerSample): boolean =>
+        Boolean(s.buttons & 4) || (s.spaceHeld && Boolean(s.buttons & 1));
+
+      const offDown = pointer.onPointerDownEvt((s) => {
+        if (s.button === 1 || (s.spaceHeld && s.button === 0)) {
+          panLast = s.screen;
+          return;
+        }
+        activeTool?.onPointerDown(s);
+      });
+      const offMove = pointer.onPointerMoveEvt((s) => {
+        if (isPanGesture(s)) {
+          if (panLast) {
+            const dx = s.screen[0] - panLast[0];
+            const dy = s.screen[1] - panLast[1];
+            camera.center = [
+              camera.center[0] - dx / camera.zoom,
+              camera.center[1] + dy / camera.zoom,
+            ];
+            applyCamera();
+            scheduleDraw();
+          }
+          panLast = s.screen;
+          return;
+        }
+        panLast = null;
+        activeTool?.onPointerMove(s);
+      });
+      const offUp = pointer.onPointerUpEvt(() => {
+        panLast = null;
+      });
+      const offKey = pointer.onKeyDownEvt(handleGlobalKey);
+
+      const onWheel = (e: WheelEvent): void => {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const pivot: [number, number] = [e.clientX - rect.left, e.clientY - rect.top];
+        const pivotWorld = screenToWorld(pivot);
+        const zoomDelta = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+        const inv = 1 / zoomDelta;
+        camera.center = [
+          pivotWorld[0] + (camera.center[0] - pivotWorld[0]) * inv,
+          pivotWorld[1] + (camera.center[1] - pivotWorld[1]) * inv,
+        ];
+        camera.zoom = camera.zoom * zoomDelta;
+        applyCamera();
+        scheduleDraw();
+      };
+      canvas.addEventListener("wheel", onWheel, { passive: false });
+
+      // Initial sync + ongoing subscriptions.
+      syncEntities();
+      const unsubStore = useDrawingSession.subscribe(syncEntities);
+      const unsubRubber = rubberBand.subscribe(syncEntities);
+
+      cleanup = (): void => {
+        offDown();
+        offMove();
+        offUp();
+        offKey();
+        canvas.removeEventListener("wheel", onWheel);
+        ro.disconnect();
+        unsubStore();
+        unsubRubber();
+        pointer.destroy();
+        if (rafToken) cancelAnimationFrame(rafToken);
+        renderer.destroy();
+      };
+    })();
+
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
+  }, []);
+
+  return null;
+}
+
+/**
+ * No-op renderer used when GPU init fails. Keeps the rest of the app
+ * (tools, store, file menu) functional so headless tests and a11y
+ * runs can still exercise the canvas surface.
+ */
+function makeNoopRenderer(): SceneRenderer {
+  return {
+    backend: "webgl2",
+    upsert: () => undefined,
+    remove: () => undefined,
+    camera: () => undefined,
+    resize: () => undefined,
+    draw: () => undefined,
+    pick: () => null,
+    getStats: () => ({ fps: 0, drawCalls: 0, entityCount: 0, frameTimeMs: 0 }),
+    on: () => () => undefined,
+    destroy: () => undefined,
+  };
+}
