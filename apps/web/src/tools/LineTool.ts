@@ -56,6 +56,24 @@ export class LineTool implements Tool {
     }
   }
 
+  onCoordinate(point: Vec2Type): void {
+    // Typed-coord input from the palette/command-line bar — behaves
+    // like a click at `point` (no snap; the user typed exact numbers).
+    if (this.startPoint === null) {
+      this.startPoint = clone(point);
+      this.setStep("pick-second");
+      return;
+    }
+    this.ctx.bus.execute(drawLineCommand({ a: this.startPoint, b: clone(point) }));
+    this.ctx.syncDirty();
+    this.startPoint = clone(point);
+    this.refreshPreview();
+  }
+
+  lastPoint(): Vec2Type | null {
+    return this.startPoint;
+  }
+
   dispose(): void {
     this.ctx?.rubberBand.remove(PREVIEW_ID);
   }

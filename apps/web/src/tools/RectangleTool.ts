@@ -55,6 +55,24 @@ export class RectangleTool implements Tool {
     }
   }
 
+  onCoordinate(point: Vec2Type): void {
+    if (this.corner === null) {
+      this.corner = clone(point);
+      this.setStep("pick-second");
+      return;
+    }
+    this.ctx.bus.execute(drawRectangleCommand({ a: this.corner, b: clone(point) }));
+    this.ctx.syncDirty();
+    this.corner = null;
+    this.ctx.rubberBand.remove(PREVIEW_ID);
+    useCommandState.getState().clear();
+    this.ctx.done();
+  }
+
+  lastPoint(): Vec2Type | null {
+    return this.corner;
+  }
+
   dispose(): void {
     this.ctx?.rubberBand.remove(PREVIEW_ID);
   }

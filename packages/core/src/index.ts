@@ -105,13 +105,127 @@ export { drawPointCommand } from "./commands/draw/drawPoint.js";
 export type { DrawPointParams } from "./commands/draw/drawPoint.js";
 export { parseCoord } from "./commands/parseCoord.js";
 export type { ParseContext, ParseResult } from "./commands/parseCoord.js";
+export { CommandRegistry, builtinRegistry } from "./commands/registry.js";
+export type { CommandDefinition } from "./commands/registry.js";
 export { originRebaseCommand } from "./scene/originRebase.js";
 export { DimensionGraph } from "./scene/dimensionGraph.js";
 export { buildStaticIndex, DynamicIndex } from "./index/SpatialIndex.js";
 export type { SpatialIndex } from "./index/SpatialIndex.js";
+export {
+  bboxOfEntity,
+  bboxOfEntities,
+  bboxOfLine,
+  bboxOfPolyline,
+  bboxOfCircle,
+  bboxOfArc,
+  bboxOfEllipse,
+  bboxOfPoint,
+} from "./geometry/primitives.js";
 export { SnapEngine } from "./snap/SnapEngine.js";
 export type {
   SnapCandidate,
   SnapEngineOptions,
   SnapStrength,
 } from "./snap/SnapEngine.js";
+// Layer commands — FR-010, FR-012.
+export { addLayerCommand } from "./commands/layers/addLayer.js";
+export type { AddLayerParams, AddLayerResult } from "./commands/layers/addLayer.js";
+export { removeLayerCommand } from "./commands/layers/removeLayer.js";
+export type { RemoveLayerParams } from "./commands/layers/removeLayer.js";
+export { renameLayerCommand } from "./commands/layers/renameLayer.js";
+export type { RenameLayerParams } from "./commands/layers/renameLayer.js";
+export {
+  setLayerVisibleCommand,
+  setLayerLockedCommand,
+  setLayerFrozenCommand,
+} from "./commands/layers/setLayerFlag.js";
+export type {
+  SetLayerVisibleParams,
+  SetLayerLockedParams,
+  SetLayerFrozenParams,
+} from "./commands/layers/setLayerFlag.js";
+export { setLayerColorCommand } from "./commands/layers/setLayerColor.js";
+export type { SetLayerColorParams } from "./commands/layers/setLayerColor.js";
+export { setLayerLineweightCommand } from "./commands/layers/setLayerLineweight.js";
+export type { SetLayerLineweightParams } from "./commands/layers/setLayerLineweight.js";
+export { reorderLayerCommand } from "./commands/layers/reorderLayer.js";
+export type { ReorderLayerParams } from "./commands/layers/reorderLayer.js";
+export { setCurrentLayerCommand } from "./commands/layers/setCurrentLayer.js";
+export type { SetCurrentLayerParams } from "./commands/layers/setCurrentLayer.js";
+export {
+  LayerLockedError,
+  LayerFrozenError,
+  UndeletableLayerError,
+  LayerNotFoundError,
+} from "./commands/layers/errors.js";
+// Entity-style modify commands — FR-011.
+export { setEntityLayerCommand } from "./commands/modify/setEntityLayer.js";
+export type { SetEntityLayerParams } from "./commands/modify/setEntityLayer.js";
+export { setEntityColorCommand } from "./commands/modify/setEntityColor.js";
+export type { SetEntityColorParams } from "./commands/modify/setEntityColor.js";
+export { setEntityLineweightCommand } from "./commands/modify/setEntityLineweight.js";
+export type { SetEntityLineweightParams } from "./commands/modify/setEntityLineweight.js";
+// Renderer-side byLayer resolution.
+export {
+  effectiveColor,
+  effectiveLineweight,
+  isHidden,
+  resolveStyle,
+} from "./scene/effectiveStyle.js";
+// Settings commands — FR-015b.
+export { changeUnitsCommand } from "./commands/settings/changeUnits.js";
+export type { ChangeUnitsParams } from "./commands/settings/changeUnits.js";
+// US6 modify commands — FR-005.
+export { moveCommand } from "./commands/modify/move.js";
+export type { MoveParams } from "./commands/modify/move.js";
+export { copyCommand } from "./commands/modify/copy.js";
+export type { CopyParams } from "./commands/modify/copy.js";
+export { rotateCommand } from "./commands/modify/rotate.js";
+export type { RotateParams } from "./commands/modify/rotate.js";
+export {
+  scaleCommand,
+  InvalidScaleFactorError,
+} from "./commands/modify/scale.js";
+export type { ScaleParams } from "./commands/modify/scale.js";
+export {
+  mirrorCommand,
+  DegenerateMirrorAxisError,
+} from "./commands/modify/mirror.js";
+export type { MirrorParams } from "./commands/modify/mirror.js";
+export { arrayRectCommand } from "./commands/modify/arrayRect.js";
+export type { ArrayRectParams } from "./commands/modify/arrayRect.js";
+export { arrayPolarCommand } from "./commands/modify/arrayPolar.js";
+export type { ArrayPolarParams } from "./commands/modify/arrayPolar.js";
+export {
+  offsetCommand,
+  UnsupportedOffsetError,
+} from "./commands/modify/offset.js";
+export type { OffsetParams } from "./commands/modify/offset.js";
+export {
+  trimCommand,
+  UnsupportedTrimError,
+} from "./commands/modify/trim.js";
+export type { TrimParams } from "./commands/modify/trim.js";
+export {
+  extendCommand,
+  UnsupportedExtendError,
+} from "./commands/modify/extend.js";
+export type { ExtendParams } from "./commands/modify/extend.js";
+export {
+  filletCommand,
+  UnsupportedFilletError,
+} from "./commands/modify/fillet.js";
+export type { FilletParams } from "./commands/modify/fillet.js";
+export {
+  chamferCommand,
+  UnsupportedChamferError,
+} from "./commands/modify/chamfer.js";
+export type { ChamferParams } from "./commands/modify/chamfer.js";
+export {
+  modifyGeometryCommand,
+  InvalidGripTargetError,
+} from "./commands/modify/modifyGeometry.js";
+export type {
+  ModifyGeometryParams,
+  GeometryMember,
+} from "./commands/modify/modifyGeometry.js";

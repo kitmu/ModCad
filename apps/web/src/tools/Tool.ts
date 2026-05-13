@@ -26,6 +26,19 @@ export interface Tool {
   onKeydown(e: KeyboardEvent): void;
   /** Called by CanvasHost when the user switches tools or closes the slice. */
   dispose(): void;
+  /**
+   * Typed-coordinate input from the palette/command-line bar (T067).
+   * `point` is already parsed (absolute world coordinates). Tools that
+   * support typed input behave as if the user clicked at `point` and
+   * advance their state machine; tools that don't (point tool, etc.)
+   * may treat it as a single-shot placement or no-op.
+   */
+  onCoordinate?(point: Vec2Type): void;
+  /**
+   * Most recently committed point in the tool's in-flight construction,
+   * if any. Used as `ParseContext.lastPoint` for `@dx,dy` and `@d<a`.
+   */
+  lastPoint?(): Vec2Type | null;
 }
 
 /** Helper for tools: clone a Vec2 so later mutations don't reach the kernel. */

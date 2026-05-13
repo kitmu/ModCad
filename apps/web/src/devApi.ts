@@ -6,11 +6,14 @@
 //
 // Mounted unconditionally in dev/test builds; production should tree-shake
 // it via Vite's `import.meta.env.PROD` guard in main.tsx if/when desired.
-import type { Drawing, Vec2Type } from "@modcad/core";
+import type { Drawing, Entity, Id, Vec2Type } from "@modcad/core";
+import { listVisibleEntities } from "@modcad/core";
 import { readModcad, writeModcad } from "@modcad/codecs";
 import { useDrawingSession } from "./workspace/DrawingSessionStore.js";
 import { useCommandState } from "./state/commandState.js";
 import { useSnapState } from "./state/snapState.js";
+import { useSelection } from "./state/selection.js";
+import { useNotifications } from "./state/notifications.js";
 import {
   installFsAccessOverrides,
   type FsAccessOverrides,
@@ -37,6 +40,12 @@ export interface DevApi {
   installFsStub: (overrides: FsAccessOverrides) => void;
   /** Restore the unstubbed FS Access wrappers. */
   uninstallFsStub: () => void;
+  /** Entities the active drawing would render (layer-visibility filtered). */
+  readonly visibleEntities: Entity[];
+  /** Notifications surface (US3 acceptance scenario 4). */
+  readonly notifications: ReadonlyArray<{ id: number; message: string }>;
+  /** Selection helpers — used by US3 properties-panel test. */
+  setSelection: (ids: Id[]) => void;
 }
 
 declare global {
@@ -84,6 +93,22 @@ export function installDevApi(): void {
     },
     uninstallFsStub: () => {
       installFsAccessOverrides(null);
+    },
+    get visibleEntities() {
+      const { slices, activeId } = useDrawingSession.getState();
+      const active = slices.find((s) => s.id === activeId);
+      return active ? listVisibleEntities(active.drawing) : [];
+    },
+    get notifications() {
+      return useNotifications.getState().list.map((n) => ({
+        id: n.id,
+        message: n.message,
+      }));
+    },
+    setSelection: (ids) => {
+      const { activeId } = useDrawingSession.getState();
+      if (!activeId) return;
+      useSelection.getState().set(activeId, ids);
     },
   };
   window.__modcad = api;

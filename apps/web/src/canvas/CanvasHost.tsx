@@ -21,6 +21,7 @@ import {
 } from "@modcad/renderer";
 import {
   listVisibleEntities,
+  resolveStyle,
   type Drawing,
   type Entity,
   type Id,
@@ -39,24 +40,13 @@ import { EllipseTool } from "../tools/EllipseTool.js";
 import { PointTool } from "../tools/PointTool.js";
 import type { Tool, ToolContext } from "../tools/Tool.js";
 import { saveActiveDrawing, openDrawingFromDisk } from "../files/fileActions.js";
+import { commandRouter } from "../palette/commandRouter.js";
 
 interface Camera {
   center: Vec2Type;
   zoom: number;
   rotation: number;
 }
-
-// Single-letter shortcuts. Phase 4 palette will own a richer binding
-// map (REC, ARC, etc.) — these are the minimal shortcuts US1 e2e drives.
-const TOOL_SHORTCUTS: Record<string, () => Tool> = {
-  L: () => new LineTool(),
-  R: () => new RectangleTool(),
-  C: () => new CircleTool(),
-  A: () => new ArcTool(),
-  P: () => new PolylineTool(),
-  E: () => new EllipseTool(),
-  O: () => new PointTool(),
-};
 
 export function CanvasHost(): null {
   useEffect(() => {
@@ -125,7 +115,12 @@ export function CanvasHost(): null {
         const { slices, activeId } = useDrawingSession.getState();
         const active = slices.find((s) => s.id === activeId);
         const drawing: Drawing | null = active?.drawing ?? null;
-        const visible: Entity[] = drawing ? listVisibleEntities(drawing) : [];
+        // Resolve byLayer color/lineweight before upload so the renderer
+        // never sees a placeholder. Surgical: just pre-resolve the styles;
+        // entity shape is otherwise unchanged.
+        const visible: Entity[] = drawing
+          ? listVisibleEntities(drawing).map((e) => resolveStyle(e, drawing))
+          : [];
         const transient = rubberBand.list();
         const all = [...visible, ...transient];
         const nextIds = new Set<string>(all.map((e) => e.id));
@@ -223,6 +218,36 @@ export function CanvasHost(): null {
         tool.start(ctx);
       };
 
+      // Expose the active tool to the palette router so typed
+      // coordinates reach `onCoordinate` and parseCoord can use the
+      // tool's last committed point.
+      commandRouter.setActiveToolAccessor(() => activeTool);
+
+      // Register handlers for every command the palette can dispatch.
+      // The palette/keybinding key handler hits the router; the router
+      // calls these. (Pre-existing single-letter shortcuts in
+      // handleGlobalKey now flow through here too.)
+      commandRouter.register("draw.line", () => activateTool(new LineTool()));
+      commandRouter.register("draw.rectangle", () => activateTool(new RectangleTool()));
+      commandRouter.register("draw.circle", () => activateTool(new CircleTool()));
+      commandRouter.register("draw.arc", () => activateTool(new ArcTool()));
+      commandRouter.register("draw.polyline", () => activateTool(new PolylineTool()));
+      commandRouter.register("draw.ellipse", () => activateTool(new EllipseTool()));
+      commandRouter.register("draw.point", () => activateTool(new PointTool()));
+      commandRouter.register("view.fit", () => fitDrawing());
+      commandRouter.register("file.new", () => {
+        useDrawingSession.getState().openNew();
+      });
+      commandRouter.register("file.open", () => {
+        void openDrawingFromDisk();
+      });
+      commandRouter.register("file.save", () => {
+        void saveActiveDrawing();
+      });
+      commandRouter.register("file.saveAs", () => {
+        void saveActiveDrawing();
+      });
+
       const handleGlobalKey = (e: KeyboardEvent): void => {
         const target = e.target as HTMLElement | null;
         if (
@@ -259,10 +284,8 @@ export function CanvasHost(): null {
           useDrawingSession.getState().openNew();
           return;
         }
-        if (e.ctrlKey || e.metaKey || e.altKey) return;
-        const key = e.key.toUpperCase();
-        const ctor = TOOL_SHORTCUTS[key];
-        if (ctor) activateTool(ctor());
+        // Single-letter tool shortcuts (L, R, C, …) are now owned by the
+        // PaletteKeyboard + keybinding store (T068). Phase-4 onwards.
       };
 
       const pointer = new PointerInput({ canvas, screenToWorld });
