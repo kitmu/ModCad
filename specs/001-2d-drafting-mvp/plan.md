@@ -73,8 +73,10 @@ time ≤ 16 ms during pan/zoom on the 50k benchmark.
 
 **Constraints**: offline-capable; no PII leaves the device; bundled
 runtime ≤ 600 KB gzip for the initial route (kernel + renderer + UI
-shell); codecs lazy-loaded; numeric stability bounded across a 1e6
-unit working area with local-origin rebase past that.
+shell); codecs lazy-loaded; precision tier system per Constitution
+Principle I (Tier A 0–10⁶ full / Tier B 10⁶–10⁹ degraded / Tier C
+>10⁹ refused) with automatic local-origin rebase between tiers; peak
+heap on the 50k benchmark ≤ 400 MB.
 
 **Scale/Scope**: a v1 release supporting drawings up to ~200k entities
 in memory, ~50k visible on screen at any one time. ~70 user-invokable
@@ -123,10 +125,13 @@ apps/
     ├── src/
     │   ├── main.tsx
     │   ├── routes/
-    │   │   ├── Drawing.tsx       # the one drawing route (one per tab)
+    │   │   ├── Workspace.tsx     # owns the tab strip + active slot
     │   │   └── Boot.tsx          # cold-start file picker / restore prompt
+    │   ├── workspace/
+    │   │   ├── TabStrip.tsx      # in-app tab strip (FR-033)
+    │   │   └── DrawingSessionStore.ts # per-slot state slices
     │   ├── canvas/
-    │   │   ├── CanvasHost.tsx    # mounts the renderer surface
+    │   │   ├── CanvasHost.tsx    # mounts the renderer surface; PointerEvents only
     │   │   ├── PointerInput.ts   # pointer/keyboard → command bus events
     │   │   └── AriaLive.tsx      # selection/command live region
     │   ├── panels/
@@ -207,6 +212,48 @@ all three. The split exists because (a) the core is reusable headless
 renderer's two backends share an API. We will not pre-split `core`
 into geometry/scene/commands/snap until a second external consumer
 appears (constitution VII).
+
+### Cross-cutting renderer / input / store decisions
+
+These are decisions the constitution flags but doesn't fully resolve;
+recording them here so they're enforced from Phase 2:
+
+- **Line rendering**: instanced extruded quads (1 quad per segment, 4
+  vertices, instanced). Joins are miter with a fallback to bevel past
+  a miter-limit angle; caps are configurable per stroke (butt /
+  round / square). The fragment shader computes signed distance to
+  the segment for analytic anti-aliasing. The same geometry feeds
+  picking (offsetting outward by 2 px in screen space for fat-line
+  hit-test). This avoids any reliance on native fat-line primitives
+  (which neither WebGPU nor WebGL2 provides) and is shared between
+  both backends to satisfy the parity gate.
+- **Dimension dependency graph**: a `Map<entityId, Set<dimensionId>>`
+  maintained by the command bus. On every entity mutation, the bus
+  enqueues a re-evaluation only for the dimensions in the set,
+  satisfying FR-014's O(changed) requirement. The graph rebuilds on
+  load and is invalidated by entity-add/remove commands.
+- **Multi-document state slices**: a top-level `DrawingSessionStore`
+  owns one slice per tab-strip slot. Each slice is an independent
+  Zustand store instance behind the same factory; the active slice
+  is the only one mounted to the renderer at a time. Switching slots
+  is a renderer re-mount + scene-graph upload, not a full reload.
+  Bench target: slot switch ≤ 100 ms on the 50k benchmark.
+- **Input**: all pointer/keyboard goes through `PointerEvents` —
+  no `mousedown`/`touchstart` handlers anywhere. This keeps stylus,
+  pen, and touch consistent with mouse from day one (constitution
+  Principle II + Renderer constraints).
+- **Color management**: working space sRGB everywhere. Color picker
+  values, layer colors, and exported PDFs/PNGs/SVGs are sRGB-tagged.
+  P3 / wide-gamut deferred. Texture/render-target formats use
+  sRGB-aware variants (`bgra8unorm-srgb` on WebGPU, sRGB framebuffer
+  on WebGL2) so on-screen colors match exports.
+- **Internationalization**: i18n wrapper (T046a) is mandatory from
+  Phase 2. RTL languages (Arabic, Hebrew) flip the **chrome layout**
+  (panels, toolbars, palette text) via standard `dir="rtl"`
+  inheritance. **Canvas content is locale-agnostic** — drawings draw
+  the same regardless of UI language; user-authored text inside the
+  drawing follows the entity's own bidi metadata. RTL is exercised
+  by at least one Playwright spec.
 
 ## Phased delivery
 
@@ -305,10 +352,11 @@ Gate: User Stories 1, 2, 3 e2e green.
   variants. Re-flow on referent move within the same frame.
 - **Modify expansion**: Array (linear, rectangular; polar is P3),
   Mirror, Chamfer (with the FR-005a dual mode).
-- **Cross-tab single-writer lock** (FR-032) via Web Locks API.
-- **Multi-document** (FR-033): File > Open / File > New always open
-  in a new browser tab; same-file open in a second tab → read-only +
-  Take-over flow.
+- **Cross-window single-writer lock** (FR-032) via Web Locks API,
+  narrowed to "same file in a second browser tab/window".
+- **Multi-document tab strip** (FR-033): in-app strip across the top,
+  drag-reorder, keyboard cycle, autosave-per-slot, soft limit 10.
+  Shares one WebGPU context across all slots.
 - **Autosave** (FR-031): 30 s debounce while dirty, write to OPFS or
   IndexedDB. Restore prompt on next open.
 

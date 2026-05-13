@@ -24,6 +24,12 @@ import/export, modern UI (command palette, contextual toolbars, dark mode)."
 - Q: Trim / Extend / Fillet interaction model? → A: Dual mode. (1) Quick mode (default when the user presses Enter at the "Select edges/boundaries" prompt): hover an entity, see the proposed cut or extension in red, click to commit; the cut/extend boundary is the first crossing in cursor direction. (2) Classic mode: the user picks cutting edges or extension boundaries first via single-pick, fence, window, crossing, or area drag, and only those edges constrain the operation. The active mode is shown in the command's persistent state panel.
 - Q: Renderer — WebGL2 or WebGPU? → A: WebGPU as the primary renderer; WebGL2 as an automatic fallback for browsers that lack WebGPU at runtime. The scene API and visual output MUST be identical on both. This supersedes the constitution's prior WebGL2-only constraint and is reflected in an updated principle.
 
+### Session 2026-05-13
+
+- Revision to Session 2026-05-12 Q5 (multi-document support): **the one-drawing-per-tab decision is reversed.** The primary multi-document UX is now an in-app **tab strip** across the top of the window; opening a second drawing adds it to the strip in the same browser tab. Each strip slot owns its own state slice but shares one WebGPU context. The Web Locks single-writer model (FR-032) is retained but narrowed to "same file opened in a separate browser window/tab"; the in-app tab strip is the common case and does not need it. FR-033 is rewritten accordingly.
+- Q: Static-cursor snap tie-breaker order? → A: Endpoint > intersection > center > midpoint > perpendicular > tangent > node > nearest. Soft snaps (parallel extension, alignment guide) never out-rank hard snaps in this list.
+- Q: Native format v1 vs binary path? → A: `.modcad` stays JSON+gzip in v1 for diff-friendliness and debuggability. A binary variant (CBOR or MessagePack) is documented in research.md as a v2 candidate.
+
 ## User Scenarios & Testing
 
 ### User Story 1 — Draft a simple plan from scratch (Priority: P1)
@@ -264,16 +270,22 @@ frame time must be ≤ 16 ms on the baseline hardware.
 - User's browser denies the File System Access API: app falls back to
   download/upload, and "Save" becomes "Download a copy" with a clear
   hint.
-- Drawing contains entities with coordinates exceeding 1e6 units: app
-  warns but loads; precision degradation is documented.
-- User opens the same drawing in a second tab while the first holds
-  unsaved changes: the second tab opens read-only and shows a "Take
-  over editing" button. Clicking it asks the first tab (via a
-  cross-tab message) to flush pending edits or discard them; on
-  confirmation, the writer lock transfers to the second tab and the
-  first becomes read-only. If the first tab is closed or unresponsive,
-  the lock can be force-transferred after a short timeout with an
-  explicit confirmation.
+- Drawing has entities in Tier B (1e6 to 1e9 units from local origin):
+  app loads, origin rebases automatically, and a status indicator
+  reports the active precision tier. Tier C (>1e9): app warns and
+  refuses to create new geometry past the limit; existing geometry
+  loads as read-only.
+- User opens the same drawing in a second **browser tab or window**
+  while the first holds unsaved changes: the second instance opens
+  read-only and shows a "Take over editing" button (FR-032). Note:
+  opening the same file in a *second slot of the same tab's strip*
+  is also single-writer-enforced by the in-process command bus
+  (only one slot may be active for that file).
+- GPU context loss (Windows GPU process restart, driver crash, tab
+  backgrounded too long on some browsers): renderer rebuilds from
+  the entity store, selection and camera restored, a toast announces
+  the recovery, and any in-progress command resumes from its draft
+  (FR-034).
 - User imports a DXF that references missing fonts: text entities render
   in a fallback font with a one-time warning; fallback choice is
   configurable.
@@ -285,11 +297,21 @@ frame time must be ≤ 16 ms on the baseline hardware.
 #### Drawing primitives
 - **FR-001**: Users MUST be able to create line segments, polylines
   (open and closed), rectangles, circles (by center+radius, by 2 points,
-  by 3 points), arcs (by center+start+end, by 3 points), ellipses, and
-  single-line text.
+  by 3 points), arcs (by center+start+end, by 3 points), ellipses,
+  point entities (single coordinate node, used for measurement and
+  reference targets), and single-line text.
 - **FR-002**: Users MUST be able to enter coordinates numerically during
   any drawing command, in absolute (`x,y`), relative (`@dx,dy`), and
   polar (`@dist<angle`) forms.
+- **FR-002a**: Dynamic input MUST be available near the cursor for every
+  drawing command that picks a point. While dragging the cursor:
+  (a) typing a number locks the current dimension (distance or
+  radius) to that value; (b) pressing Tab moves focus between the
+  command's input fields (e.g., distance → angle for a polar line);
+  (c) pressing Enter commits the current values and advances to the
+  next prompt; (d) pressing Escape cancels the active field's lock
+  without aborting the command. Fields show their unit and current
+  precision.
 - **FR-003**: The application MUST display a cursor preview ("rubber
   band") of the in-progress primitive after the first point is placed
   and before the command commits.
@@ -300,8 +322,11 @@ frame time must be ≤ 16 ms on the baseline hardware.
   drag, fully-enclosed), crossing (right-to-left drag, any
   intersection), and Select All.
 - **FR-005**: Users MUST be able to move, copy, rotate, scale, mirror,
-  array (linear and rectangular), trim, extend, offset, and fillet
-  selected entities. These commands MUST accept either a pre-selection
+  **ARRAYRECT** (rectangular array — rows × columns × levels for v1
+  with levels = 1), **ARRAYPOLAR** (polar/circular array — count,
+  total angle, center point), trim, extend, offset, and fillet
+  selected entities. **ARRAYPATH** (array along a curve) is out of
+  scope for v1. These commands MUST accept either a pre-selection
   (selection → command) or a post-selection (command → selection
   prompt); the prompt sequence MUST behave identically across both
   paths.
@@ -338,7 +363,12 @@ frame time must be ≤ 16 ms on the baseline hardware.
   the application MUST show **one** marker at a time — the candidate
   predicted from the cursor's recent motion vector — rendered large
   and unambiguous, never a cluster. Pressing `Tab` MUST cycle through
-  the other in-range candidates in order of proximity.
+  the other in-range candidates in order of proximity. When the
+  cursor is static (no recent motion vector), the marker MUST be
+  chosen by this precedence ladder, in order: **endpoint, intersection,
+  center, midpoint, perpendicular, tangent, node, nearest.** Soft
+  snaps (parallel extensions, alignment guides) MUST NOT out-rank any
+  hard snap on this ladder.
 - **FR-008b**: An active snap MUST display its measurement inline near
   the cursor: distance from the previous point and angle in the
   drawing's units and precision. Soft snaps (alignment guides,
@@ -365,7 +395,11 @@ frame time must be ≤ 16 ms on the baseline hardware.
 - **FR-013**: Users MUST be able to create aligned, linear (horizontal
   and vertical), angular, radial, and diameter dimensions.
 - **FR-014**: Dimensions MUST be associative: when the geometry they
-  reference moves, the dimension updates within the same frame.
+  reference moves, the dimension updates within the same frame. The
+  update cost MUST be **O(changed dimensions)** rather than
+  O(all entities); the implementation maintains a `referent → dimension`
+  adjacency map so a single entity move touches only the dimensions
+  bound to it.
 - **FR-015**: The application MUST support unit systems for millimeters,
   centimeters, meters, inches, and feet, with user-configurable
   precision (0–6 decimal places or fractional inches).
@@ -449,20 +483,50 @@ frame time must be ≤ 16 ms on the baseline hardware.
 - **FR-031**: The application MUST autosave the current drawing to
   browser-local storage at most every 30 seconds while edits are
   pending, and MUST offer to restore on next open if the prior session
-  ended without an explicit save.
+  ended without an explicit save. Retention: the **last 10 autosave
+  snapshots per file** are preserved in OPFS, keyed by file handle +
+  ISO timestamp, with oldest purged on rotation. A user-explicit Save
+  does not consume an autosave slot. Autosave storage MUST be
+  enumerable so the user can pick any of the last 10 to restore (not
+  only the most recent).
 - **FR-032**: The application MUST enforce a single-writer model per
-  open drawing across tabs and windows using the Web Locks API. The
-  tab that opens a drawing first holds the writer lock; subsequent
-  tabs opening the same drawing MUST present it read-only and offer a
-  "Take over editing" affordance. Lock transfer MUST coordinate with
-  the holding tab to flush or discard pending edits before releasing
-  the lock; if the holder is unresponsive past a short timeout, the
-  user MUST be able to force-transfer with an explicit confirmation.
-- **FR-033**: Each browser tab MUST host exactly one drawing. The File
-  > Open and File > New commands MUST open the target file or new
-  drawing in a new browser tab, leaving the originating tab's state
-  untouched. In-tab document tabs and detached document windows are
-  explicitly out of scope for v1.
+  open drawing across **browser tabs and windows** using the Web Locks
+  API. The same drawing opened in a second browser tab or window MUST
+  present read-only and offer a "Take over editing" affordance. Lock
+  transfer MUST coordinate with the holding tab to flush or discard
+  pending edits before releasing the lock; if the holder is
+  unresponsive past a short timeout, the user MUST be able to
+  force-transfer with an explicit confirmation. The in-app tab strip
+  (FR-033) is the common multi-document path and does NOT use the
+  Web Locks lock — slots in the strip share the same browser tab and
+  process.
+- **FR-033**: Multi-document UX is delivered via an **in-app tab
+  strip** across the top of the window. Each slot in the strip holds
+  one open drawing with its own state slice (drawing, selection,
+  undo stack, current layer) while sharing one WebGPU context, one
+  command-bus implementation, and the global preferences store. The
+  strip MUST support:
+  - up to 10 open drawings per browser tab (soft limit; warns past
+    it); harder OS-memory limits enforced via `navigator.deviceMemory`
+    heuristics
+  - opening files via File > Open, drag-drop onto the strip, or
+    File > New, adding a new slot
+  - close-slot affordance with unsaved-changes prompt
+  - drag-reorder slots within the strip
+  - keyboard cycle: `Ctrl/Cmd-Tab` next slot, `Ctrl/Cmd-Shift-Tab`
+    previous, `Ctrl/Cmd-W` close active slot
+  - middle-click-to-close on the slot tab
+  - per-slot dirty indicator and unsaved-changes recovery via
+    autosave (FR-031)
+  Detached document windows ("drag a slot out to its own window")
+  and cross-tab document moves remain out of scope for v1.
+- **FR-034**: The application MUST survive GPU context loss
+  (`GPUDevice.lost` on WebGPU, `WEBGL_lose_context` on WebGL2): on
+  loss, rebuild the renderer from the entity store, restore camera
+  and selection state, and surface a non-blocking toast informing
+  the user. Any in-progress command MUST be preserved as a draft so
+  the user does not lose work mid-command. Recovery time MUST be
+  ≤ 1 second on the baseline 50k benchmark.
 
 ### Key Entities
 
@@ -514,6 +578,12 @@ frame time must be ≤ 16 ms on the baseline hardware.
   successfully save a drawing within their first session.
 - **SC-008**: Every shipped command has at least one acceptance scenario
   covered by an automated end-to-end test.
+- **SC-009**: Peak heap usage on the canonical 50,000-entity benchmark
+  scene MUST stay below **400 MB** on baseline hardware (16 GB RAM,
+  Iris Xe / M1) across a 5-minute interactive session (pan, zoom,
+  select, modify). Measured via `performance.measureUserAgentSpecificMemory()`
+  where available and a Chromium memory-pressure probe elsewhere; CI
+  bench job fails if the budget is exceeded.
 
 ## Future Directions (post-v1, recorded so v1 architecture leaves room)
 
@@ -521,6 +591,15 @@ These are deliberately **out of scope for v1** but the v1 data model,
 command bus, and renderer MUST not preclude them. They are listed here
 so plan.md and future specs inherit the direction.
 
+- **Object snap tracking (OTRACK)**: AutoCAD-style alignment guides
+  derived from acquired tracking points. v1 ships only direct snaps
+  and basic parallel/extension soft snaps.
+- **ARRAYPATH**: array along a curve. ARRAYRECT and ARRAYPOLAR ship
+  in v1.
+- **Detached document windows**: drag a slot from the tab strip out
+  to a standalone OS window. v1 ships only the in-tab strip.
+- **Binary native format**: `.modcad` becomes CBOR or MessagePack
+  with the JSON variant retained as a debug/diff target.
 - **Components, not blocks**: blocks/inserts return as typed-prop
   components (Door, Column, Window) with parametric instances and a
   library browser. Implies the entity model leaves a slot for typed
@@ -562,9 +641,13 @@ so plan.md and future specs inherit the direction.
   scale"; advanced paper-space layouts are deferred.
 - Hatching, blocks/inserts with attributes, table entities, and 3D are
   explicit non-goals for v1; the data model leaves room for them.
-- Multi-document workflows in a single tab (a tab strip across the top)
-  and detached document windows are out of scope for v1. v1 uses
-  one-drawing-per-tab; multi-document UX is a candidate for post-v1.
+- Multi-document workflows ship as an **in-app tab strip** in v1
+  (FR-033). Detached document windows are out of scope for v1.
+- The drawing working area covers a three-tier precision regime
+  (Tier A: 0–10⁶ full; Tier B: 10⁶–10⁹ with documented degradation;
+  Tier C: >10⁹ refused). This supports civil/infrastructure-scale
+  drawings at mm precision without compromising mechanical CAD
+  fidelity.
 - Browser support is the latest two stable versions of Chrome, Edge,
   Firefox, and Safari at release time. WebGPU is expected on all four
   in their current stable channels; on older releases that lack

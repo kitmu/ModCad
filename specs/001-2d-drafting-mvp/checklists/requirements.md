@@ -72,6 +72,55 @@ folded in directly (no questions reopened):
     versioned-URL refs, paper-space viewport overrides. All out of
     scope for v1.
 
+### Second CAD-architecture consultation (Session 2026-05-13)
+
+A second external review surfaced 22 items. 21 applied, 1 deferred
+(prior I1 — Three.js — applied this round). One item reversed an
+earlier clarification answer with the user's explicit approval.
+
+**Reversal**: FR-033 changed from "one drawing per tab" to "in-app
+tab strip", with cross-window Web Locks (FR-032) narrowed to
+"same file opened in a separate browser tab/window".
+
+**Constitution → v0.2.1 (PATCH)**:
+- Principle I: explicit three-tier precision regime
+  (Tier A 0–10⁶ full / Tier B 10⁶–10⁹ documented degradation /
+  Tier C >10⁹ refused). Replaces the prior "1e6 working area"
+  phrasing; enables civil/infrastructure-scale drawings.
+- Principle II: parity gate reworded — "visual parity within
+  documented per-pixel tolerance + feature parity matrix" replaces
+  "visually identical results".
+- Renderer constraints add line rendering (instanced extruded quads,
+  analytic AA), sRGB working space, PointerEvents-only input.
+- Geometry: Clipper2-WASM behind a facade for booleans/offsets;
+  Shewchuk predicates remain unfacaded in TS. `martinez` /
+  `polygon-clipping` rejected for robustness reasons.
+- PDFKit → pdf-lib correction.
+- Three.js permission struck per Principle VII.
+
+**Spec**: FR-001 adds POINT; FR-002a dynamic input model; FR-005
+ARRAYRECT + ARRAYPOLAR (ARRAYPATH out of v1); FR-008a static-cursor
+osnap precedence ladder; FR-014 O(changed) dependency graph;
+FR-031 autosave retention (last 10 per file in OPFS); FR-032/033
+rewritten for tab strip; FR-034 GPU context-loss recovery;
+SC-009 ≤400 MB peak heap on 50k bench; Edge Cases updated for tier
+system + context loss; Future Directions add OTRACK, ARRAYPATH,
+detached windows, binary native format.
+
+**Plan**: lineweight rendering decision (instanced quads + SDF AA);
+dimension dependency graph data structure; multi-document state
+slices; RTL bidi note; sRGB color management; PointerEvents.
+
+**Research**: precision-tier table; Clipper2 vs martinez rationale;
+v2 binary format roadmap (CBOR preferred, MessagePack alternative).
+
+**Tasks**: T017a Clipper2-WASM facade; T021 precision regime + T021a
+dim-graph; T028 osnap precedence ladder; T035 fat-line pipeline;
+T039a context-loss recovery; T042/T042a tab-strip state slices and UI;
+T056a drawPoint; T057a dynamic input; T089 polar array; T100 POINT in
+DXF reader; T108 autosave retention; T110 Web Locks narrowed;
+T112 tab-strip wiring; T113b tab-strip e2e; T115a memory budget.
+
 ### Analyze pass (Session 2026-05-13)
 
 Cross-artifact scan over `spec.md`, `plan.md`, `tasks.md`, and the

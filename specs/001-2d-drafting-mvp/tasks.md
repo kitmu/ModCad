@@ -82,6 +82,11 @@ story may begin until this phase passes its gates.
       `packages/core/src/geometry/`
 - [ ] **T017 [F]** Implement `segIntersect`, `circleIntersect`,
       `arcIntersect`, `offsetCurve` (all using robust predicates)
+- [ ] **T017a [F]** Build Clipper2-WASM and wire the booleans facade
+      at `packages/core/src/geometry/booleans.ts` (union, difference,
+      intersection, offset polygon, offset polyline). Run in a Web
+      Worker via `comlink`. Property tests against degenerate inputs
+      (collinear edges, exact touches, near-zero-area slivers).
 - [ ] **T018 [F]** Gate: 95% line / 100% branch coverage on
       `predicates.ts`; CI fails below
 
@@ -91,9 +96,20 @@ story may begin until this phase passes its gates.
       entity add/remove at `packages/core/test/integration/scene.test.ts`
 - [ ] **T020 [F]** Implement `Drawing`, `Layer`, `Entity` types per
       `data-model.md` in `packages/core/src/scene/`
-- [ ] **T021 [F]** Implement origin rebase (`OriginRebaseCommand`) in
-      `packages/core/src/scene/originRebase.ts` with property test
-      asserting predicate stability after rebase
+- [ ] **T021 [F]** Implement the three-tier precision regime
+      (Constitution Principle I) in
+      `packages/core/src/scene/precisionRegime.ts`: tier classifier,
+      `OriginRebaseCommand` triggered when viewport center exceeds
+      5×10⁵ from origin, Tier-C refusal at the kernel boundary.
+      Property test asserts predicate stability after rebase across
+      a synthetic 10⁹-unit drag.
+- [ ] **T021a [F]** Dimension dependency graph in
+      `packages/core/src/scene/dimensionGraph.ts`: `Map<entityId,
+      Set<dimensionId>>` maintained by the command bus. On each
+      entity mutation, bus enqueues re-evaluation of only the
+      bound dimensions (FR-014 O(changed)). Integration test
+      verifies a single move on a 50k-entity drawing with 100
+      dimensions touches only the bound ones.
 
 ### Command bus + undo
 
@@ -117,7 +133,11 @@ story may begin until this phase passes its gates.
       cycling at `packages/core/test/integration/snap.test.ts`
 - [ ] **T028 [F]** Implement `SnapEngine` in
       `packages/core/src/snap/SnapEngine.ts` with cursor-motion
-      prediction and hard/soft distinction
+      prediction and hard/soft distinction. **Static-cursor
+      tie-breaker ladder (FR-008a)**: endpoint > intersection >
+      center > midpoint > perpendicular > tangent > node > nearest;
+      soft snaps never out-rank hard snaps. Integration test
+      exercises every ordered pair.
 - [ ] **T029 [F] [P]** Implement individual snap evaluators
       (endpoint, midpoint, center, node, intersection, perpendicular,
       tangent, nearest, parallel, grid) under
@@ -160,7 +180,12 @@ story may begin until this phase passes its gates.
       pipeline cache, MSAA 4×
 - [ ] **T034 [F]** WebGL2 backend skeleton at
       `packages/renderer/src/webgl2/backend.ts`
-- [ ] **T035 [F] [P]** Instanced line pipeline (WebGPU + WebGL2)
+- [ ] **T035 [F] [P]** Instanced fat-line pipeline (WebGPU + WebGL2):
+      one extruded quad per segment, 4 vertices instanced, miter
+      joins with bevel fallback past miter-limit, butt/round/square
+      caps, analytic SDF anti-aliasing in the fragment shader.
+      Picking shares the same geometry with screen-space outward
+      offset for hit-test tolerance.
 - [ ] **T036 [F] [P]** Instanced arc pipeline with analytic AA
       (WebGPU + WebGL2)
 - [ ] **T037 [F] [P]** Vertex-shader dash generation from arc-length
@@ -169,25 +194,47 @@ story may begin until this phase passes its gates.
       render target; CPU fallback for browsers that disallow it
 - [ ] **T039 [F]** Frame-stats overlay (FPS, drawcalls, entity count)
       behind a debug flag at `packages/renderer/src/debug/`
+- [ ] **T039a [F]** GPU context-loss recovery (FR-034): listen for
+      `GPUDevice.lost` / `WEBGL_lose_context` events, rebuild the
+      renderer from the entity store, restore camera + selection,
+      preserve any in-progress command draft, surface a non-blocking
+      toast. Integration test simulates context loss via the
+      debug-only `WEBGL_lose_context` extension on a 50k scene and
+      asserts recovery ≤ 1 s.
 - [ ] **T040 [F]** Render-parity test: render the canonical
       `benchmarks/scenes/parity.json` with each backend off-screen and
-      diff at `packages/renderer/test/parity.test.ts`
-- [ ] **T041 [F]** Gate: render-parity test ≤ 0.05% pixel diff
+      diff at `packages/renderer/test/parity.test.ts`. Plus a feature
+      parity matrix at `packages/renderer/PARITY.md` enumerating any
+      compute-only features that degrade or disable on WebGL2.
+- [ ] **T041 [F]** Gate: render-parity test within documented per-pixel
+      tolerance on canonical scenes (currently ≤ 0.05% pixel diff,
+      reviewed quarterly); PARITY.md must list every compute-only
+      degradation exposed by the test.
 
 ### State store
 
-- [ ] **T042 [F]** Zustand store wiring at
-      `apps/web/src/state/store.ts`: holds a `Drawing` reference,
-      `Selection`, command-bus state, UI flags. Re-render trigger is
-      a version counter bumped by the command bus.
+- [ ] **T042 [F]** `DrawingSessionStore` at
+      `apps/web/src/workspace/DrawingSessionStore.ts`: top-level
+      store owning one slice per tab-strip slot, with one active
+      slot mounted to the renderer. Each slice holds `Drawing`
+      reference, `Selection`, command-bus state, UI flags. Slot
+      switch is a renderer re-mount + scene-graph upload
+      (≤100 ms on the 50k bench).
+- [ ] **T042a [F]** `TabStrip.tsx` at `apps/web/src/workspace/`:
+      drag-reorder, soft-limit 10 with `navigator.deviceMemory`
+      heuristic for harder limits, middle-click-close,
+      `Ctrl/Cmd-Tab`/`Ctrl/Cmd-Shift-Tab` cycle, `Ctrl/Cmd-W` close
+      active, per-slot dirty indicator (FR-033).
 
 ### App shell
 
 - [ ] **T043 [F]** Vite app skeleton in `apps/web` with
       `index.html`, `src/main.tsx`, `src/routes/Boot.tsx`,
-      `src/routes/Drawing.tsx`
+      `src/routes/Workspace.tsx`
 - [ ] **T044 [F]** `CanvasHost.tsx` mounts the renderer and forwards
-      pointer + keyboard input via `PointerInput.ts`
+      input via `PointerInput.ts`. **PointerEvents only** — no
+      mouse/touch separate handlers (Constitution Renderer
+      constraints).
 - [ ] **T045 [F]** `StatusBar.tsx` showing coords, units, snap mode,
       scale, fps; `AriaLive.tsx` for selection + command summaries
 - [ ] **T046 [F]** First-run `UnitsDialog.tsx` per FR-015a, defaulting
@@ -240,9 +287,17 @@ hard-reloads, reopens, and sees identical geometry.
       3-point)
 - [ ] **T055 [US1] [P]** `commands/drawPolyline.ts` (open + closed)
 - [ ] **T056 [US1] [P]** `commands/drawEllipse.ts`
+- [ ] **T056a [US1] [P]** `commands/drawPoint.ts` in
+      `packages/core/src/commands/`; renders as a configurable
+      point-style (FR-001 POINT primitive)
 - [ ] **T057 [US1]** Numeric coordinate parser (abs `x,y`, rel
       `@dx,dy`, polar `@d<a`) at
       `packages/core/src/commands/parseCoord.ts`
+- [ ] **T057a [US1]** Dynamic input near the cursor at
+      `apps/web/src/canvas/DynamicInput.tsx` (FR-002a): per-command
+      field bindings, type-to-lock distance, Tab moves focus
+      between fields, Enter commits, Escape cancels active lock
+      without aborting the command. Fields surface unit + precision.
 - [ ] **T058 [US1]** Cursor preview ("rubber band") in renderer:
       transient scene-graph items keyed by the current command id
 
@@ -402,8 +457,11 @@ infinite undo.
       Ctrl-click, window, crossing, select-all, in
       `apps/web/src/canvas/Selection.ts`
 - [ ] **T089 [US6] [P]** `commands/modify/move.ts`, `copy.ts`,
-      `rotate.ts`, `scale.ts`, `mirror.ts`, `arrayRect.ts`,
-      `arrayLinear.ts` in `packages/core/src/commands/modify/`
+      `rotate.ts`, `scale.ts`, `mirror.ts`, `arrayRect.ts`
+      (rows × columns × levels=1), `arrayPolar.ts` (count, total
+      angle, center point) in `packages/core/src/commands/modify/`.
+      `arrayPath` is explicitly out of scope for v1 (Future
+      Directions).
 - [ ] **T090 [US6]** `commands/modify/trim.ts` and `extend.ts` with
       Quick + Classic mode dispatch per FR-005a
 - [ ] **T091 [US6] [P]** `commands/modify/offset.ts`, `fillet.ts`,
@@ -444,8 +502,9 @@ lineweights; export DXF/SVG/PDF round-trip parity.
 ### Implementation
 
 - [ ] **T100 [US5] [P]** Hand-rolled DXF reader for the spec subset
-      (LINE, LWPOLYLINE, POLYLINE, CIRCLE, ARC, ELLIPSE, TEXT, MTEXT,
-      DIMENSION, LAYER, LTYPE) in `packages/codecs/src/dxf/read.ts`
+      (LINE, LWPOLYLINE, POLYLINE legacy 2D, CIRCLE, ARC, ELLIPSE,
+      POINT, TEXT, MTEXT, DIMENSION, LAYER, LTYPE) in
+      `packages/codecs/src/dxf/read.ts`
 - [ ] **T101 [US5] [P]** DXF writer at `packages/codecs/src/dxf/write.ts`
 - [ ] **T102 [US5]** DXF Web Worker wrapper via `comlink` so parsing
       large files doesn't block the main thread
@@ -473,16 +532,29 @@ implemented after the core stories so each can be tested in isolation.
 
 - [ ] **T108 [P]** Autosave service (FR-031) at
       `apps/web/src/files/autosave.ts`: 30 s debounce while dirty,
-      OPFS-first then IndexedDB fallback
-- [ ] **T109 [P]** Restore-on-open prompt at boot route
-- [ ] **T110** Web Locks single-writer (FR-032) at
-      `apps/web/src/files/locks.ts` with BroadcastChannel fallback
+      OPFS-first then IndexedDB fallback. **Retention**: rolling
+      last-10 snapshots per file in OPFS, keyed by file handle +
+      ISO timestamp, oldest purged on rotation. Manual save does not
+      consume a slot.
+- [ ] **T109 [P]** Restore-on-open UI at the boot route surfacing all
+      available autosave snapshots (not only the most recent), with
+      previews where possible
+- [ ] **T110** Cross-window single-writer (FR-032) at
+      `apps/web/src/files/locks.ts` using the Web Locks API, narrowed
+      to "same file opened in a separate browser tab/window"
+      (in-tab strip slots are coordinated by the in-process command
+      bus, not Web Locks). BroadcastChannel fallback for the holder-
+      unresponsive path.
 - [ ] **T111** "Take over editing" UI + force-transfer timeout flow
-- [ ] **T112** One-drawing-per-tab routing (FR-033): File > Open /
-      File > New open in a new tab carrying the file via
-      `window.open` and a session handoff handshake
-- [ ] **T113 [P]** Cross-tab e2e test at
-      `apps/web/tests/e2e/cross-tab-locks.spec.ts`
+- [ ] **T112** Tab-strip multi-document wiring (FR-033) — wire up
+      `TabStrip.tsx` (T042a) to `DrawingSessionStore` (T042), File
+      > Open / File > New / drag-drop, soft-limit warnings, keyboard
+      cycle bindings
+- [ ] **T113 [P]** Cross-window e2e test at
+      `apps/web/tests/e2e/cross-window-locks.spec.ts`
+- [ ] **T113b [P]** Tab-strip e2e test at
+      `apps/web/tests/e2e/tab-strip.spec.ts`: open 3 drawings,
+      cycle, reorder, close active, restore via autosave
 - [ ] **T113a [P]** Offline-mode verification e2e at
       `apps/web/tests/e2e/offline.spec.ts`: run the US1 acceptance
       scenarios with `page.context().setOffline(true)` from cold
@@ -509,6 +581,12 @@ fps pan/zoom on the 50k benchmark; 10k entity box-select ≤ 200 ms.
       pan/zoom; 10k box-select ≤200 ms) on the canonical hardware
       profile, writes `bench-report.json` artifacts, and tightens
       regression threshold to >10% per constitution Principle II.
+- [ ] **T115a [P] [US7]** Memory-budget gate (SC-009): bench job
+      records peak heap during a 5-minute scripted interactive
+      session on the 50k benchmark via
+      `performance.measureUserAgentSpecificMemory()` (where
+      available) or the Chromium memory-pressure probe. Fail at
+      >400 MB peak.
 
 ### Implementation
 

@@ -4,27 +4,48 @@ This document records the decisions made for each open technical
 question before Phase 1 implementation begins. Each entry follows
 **Decision → Rationale → Rejected alternatives**.
 
-## Geometry predicates
+## Geometry predicates and booleans
 
-**Decision**: Port the Shewchuk adaptive precision predicates
-(`orient2d`, `incircle`, `insphere`) to TypeScript, packaged in
-`packages/core/geometry/predicates.ts`. Use them everywhere we need
-exact orientation or in-circle tests; use ordinary IEEE-754 for
-non-degenerate arithmetic.
+**Decision** — two-layer geometry stack:
 
-**Rationale**: CAD intersections at near-collinear configurations are
-the single biggest source of corrupted geometry. Shewchuk's
-double-double expansions stay exact until the answer is unambiguous,
-falling through to fast paths when inputs are not pathological.
-TypeScript ports exist as reference (Mapbox `robust-predicates`,
-MIT-licensed) — we'll vendor that and add property tests.
+1. **Predicates (unfacaded, pure TS)**: vendor Mapbox
+   `robust-predicates` (Shewchuk port, MIT) into
+   `packages/core/src/geometry/predicates.ts`. `orient2d`, `incircle`,
+   `segIntersect`, `pointOnSeg` are called millions of times per
+   frame during snap/pick/hit-test/drag-preview and MUST be zero-FFI.
+   Property tests with `fast-check` gate them at 95% line / 100%
+   branch coverage.
+2. **Booleans / offsets / clipping (Clipper2-WASM behind a facade)**:
+   Clipper2 (Boost 1.0, source-available) compiled to WASM, called
+   from `packages/core/src/geometry/booleans.ts`. Used for hatch
+   boundary generation, offset polylines, polygon union/difference,
+   and polygon-from-tangle. Per-command marshaling cost is irrelevant
+   because these run at user-command frequency, not per frame.
+
+**Rationale**:
+- CAD intersections at near-collinear configurations are the single
+  biggest source of corrupted geometry; Shewchuk-style adaptive
+  precision is the only well-understood fix.
+- Polygon booleans on degenerate input (collinear edges, exact
+  touches, near-zero-area slivers) are exactly where `martinez` and
+  `polygon-clipping` fall apart in production. Clipper2's Vatti-
+  derived implementation with proper ring management is the
+  battle-tested choice.
+- Splitting the two layers means a single bad Boolean library can be
+  swapped without disturbing the millions-per-frame predicate hot
+  path.
 
 **Rejected**:
-- *Pure IEEE-754*: produces wrong-side classifications near collinear
-  configurations; the constitution forbids drawing-corruption bugs.
-- *Interval arithmetic everywhere*: ~5× slower and we don't need it
-  for non-predicate math.
+- *Pure IEEE-754 predicates*: produces wrong-side classifications near
+  collinear configurations; constitution forbids drawing-corruption.
+- *Interval arithmetic everywhere*: ~5× slower; unnecessary for
+  non-predicate math.
 - *bigjs / decimal.js*: 30× slower; overkill.
+- *`martinez` / `polygon-clipping` for booleans*: well-known
+  robustness issues on degenerate input — exactly the cases CAD
+  users hit constantly.
+- *Hand-rolled booleans in TS*: a multi-year project nobody outside
+  CGAL has pulled off well; not v1 scope.
 
 ## DXF reader/writer
 
@@ -123,10 +144,21 @@ reference + version number that drives re-renders.
 
 ## File format `.modcad`
 
-**Decision**: A small versioned JSON document, gzipped (`pako`),
+**Decision (v1)**: A small versioned JSON document, gzipped (`pako`),
 extension `.modcad`. Schema is a discriminated union with a `version`
 field; unknown fields and unknown entity types round-trip unchanged
 when re-saved (FR Edge Case).
+
+**v2 roadmap**: JSON is wasteful for geometry coordinates (15 bytes
+per double vs. 8 binary), and `.modcad` files for 50k+ entity
+drawings will be 10–30 MB compressed. Candidates for v2:
+- **CBOR** (RFC 8949): canonical binary, schema-agnostic, mature TS
+  encoders, ~3× smaller than gzipped JSON for coordinate-heavy
+  payloads. First choice.
+- **MessagePack**: similar to CBOR, slightly less canonical, slightly
+  faster decoders. Second choice.
+The JSON variant is retained as a debug/diff target indefinitely;
+the on-disk default flips when the v2 spec lands.
 
 ```jsonc
 {
@@ -167,14 +199,30 @@ undo stack with a no-op user-visible effect.
 in to site-scale all the time. Rebasing keeps numerical headroom and
 is invisible to user-facing coordinates.
 
-**Precision regime numbers (cross-reference)**:
-- `5×10⁵` units from the current local origin: origin rebase trigger.
-- `1×10⁶` units: constitution's "working area" soft ceiling. The
-  drawing remains usable past it but precision degrades
-  proportionally; we warn at load time when a drawing's bounding box
-  exceeds this value.
-- `~1×10⁷` units: hard double-precision degradation; predicates
-  start reporting wrong-side classifications on near-collinear inputs.
+**Precision regime numbers (cross-reference to Constitution
+Principle I, three-tier regime)**:
+
+| Tier | Range from local origin | Behavior |
+|---|---|---|
+| A | `0 – 10⁶` units | Full FP64 precision; all predicates exact; snap radius unbounded; minimum feature size = ULP of inputs |
+| B | `10⁶ – 10⁹` units | Precision degrades proportionally to distance from origin; snap radius widened (1 µm at 10⁹); minimum feature size documented per zoom level; predicates remain robust because they rebase to local working frame before evaluating |
+| C | `> 10⁹` units | Refused — load issues a warning, no new geometry may be created past this boundary; existing entities load read-only |
+
+**Origin rebase trigger**: when the active viewport's center wanders
+past **5×10⁵ units** from the current local origin, the renderer
+recenters the world to the viewport center, uploads a delta transform
+to the GPU, and the kernel's stored coordinates remain unchanged
+(coordinate values in `Drawing` are origin-relative; the rebase
+updates the origin not the values).
+
+**GPU FP32 precision**: GPU pipelines use FP32 throughout. Without
+rebasing, FP32 dies at ~1e7 in screen space. The rebase guarantees the
+visible geometry is always within 5×10⁵ of the local origin, well
+below the FP32 break.
+
+This supports civil/infrastructure-scale drawings (2–5 km extent at
+mm precision is routine) without compromising mechanical CAD fidelity
+at the millimeter or micrometer level.
 
 ## i18n
 

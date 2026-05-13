@@ -18,8 +18,18 @@ Geometric primitives are the contract. Any operation that mutates geometry
 MUST be:
 
 - **Numerically stable**: snapping, intersections, and offsets use robust
-  predicates; floating-point drift is bounded across a 1e6 unit working
-  area.
+  predicates (Shewchuk-style adaptive precision, never bare IEEE-754 for
+  orientation tests). Drawings operate in a documented three-tier
+  precision regime:
+  - **Tier A — `[0, 10⁶]` units from the drawing's local origin**: full
+    double-precision, all predicates exact, snap radius unbounded.
+  - **Tier B — `(10⁶, 10⁹]` units**: precision degrades proportionally;
+    snap radius and minimum feature size documented per tier.
+  - **Tier C — `> 10⁹` units**: warn at load, refuse new geometry past
+    the limit.
+  Origin rebase is automatic when the active viewport center wanders
+  past tier-A's safe zone; the rebase is invisible to user-facing
+  coordinates.
 - **Reversible**: every mutation goes through a single command bus that
   emits inverse operations into the undo stack. No silent side effects.
 - **Lossless on round-trip**: import → export of supported formats (DXF
@@ -41,8 +51,12 @@ The drawing surface MUST sustain 60 fps under the following baseline at
 Performance budgets are enforced in CI via a deterministic benchmark
 scene. Regressions >10% block merge. WebGPU is the primary renderer;
 WebGL2 is the automatic fallback when WebGPU is unavailable at runtime.
-The same scene API MUST produce visually identical results on both
-backends. Canvas2D is only allowed for UI chrome and overlays.
+The scene API MUST achieve **visual parity within a documented per-pixel
+tolerance on canonical scenes** between the two backends, plus a
+**published feature-parity matrix** listing any compute-only features
+that degrade or disable on WebGL2 (e.g., GPU-side hatch flood fill,
+parallel spatial-index build). Pixel-identity is not a CI gate; tolerated
+diff is gated. Canvas2D is only allowed for UI chrome and overlays.
 
 ### III. Spec-Driven Development (NON-NEGOTIABLE)
 
@@ -110,15 +124,31 @@ locked feature in the v1 scope.
 - **Renderer**: WebGPU primary, WebGL2 fallback. Both sit behind a
   single thin scene-graph wrapper so the rest of the app does not
   branch on backend. The WebGL2 fallback path is exercised in CI on
-  every PR. Three.js is permitted only for the optional 3D viewport,
-  never for 2D drafting.
+  every PR.
+- **Line rendering**: instanced extruded quads with miter/round/bevel
+  joins and butt/round/square caps; analytic distance-field
+  anti-aliasing in the fragment shader. Picking shares the same
+  geometry. Native fat-line primitives are NOT used on either backend
+  (they don't exist on WebGPU/WebGL2).
+- **Color**: working space is sRGB. All exports (PDF, PNG, SVG) MUST
+  be tagged sRGB. P3 / wide-gamut deferred.
+- **Input**: PointerEvents only. No separate mouse/touch handlers.
+  Pen and tablet input flow through the same surface.
 - **Build**: Vite. Node 20+ for tooling.
 - **Styling**: Tailwind CSS + shadcn/ui primitives. No CSS-in-JS runtime.
-- **Geometry**: hand-rolled kernel in `packages/geometry/`. Third-party
-  geometry libs (martinez, polygon-clipping) are allowed behind our own
-  facade; the facade is the API surface the rest of the app sees.
-- **File formats**: DXF (libredwg-web or hand-rolled subset), SVG, PDF
-  export via PDFKit. Native format is `.modcad` (JSON, gzipped).
+- **Geometry**: hand-rolled kernel in `packages/core/geometry/`.
+  Shewchuk-style adaptive-precision predicates (`orient2d`, `inCircle`,
+  `segIntersect`) live in pure TS inside the kernel and are called
+  directly with zero FFI overhead — they are the foundation everything
+  else builds on. Polygon booleans, offsetting, and clipping use
+  Clipper2-WASM behind our own facade; the facade is the API surface
+  the rest of the app sees. `martinez` and `polygon-clipping` are
+  rejected — both have well-known robustness issues on degenerate
+  inputs.
+- **File formats**: DXF (hand-rolled R2018 subset), SVG, PDF export via
+  `pdf-lib` (browser-side; PDFKit-the-Node-library is unsuitable
+  without polyfills). Native format is `.modcad` (JSON, gzipped) in
+  v1; a binary variant (CBOR or MessagePack) is on the v2 roadmap.
 - **Persistence**: IndexedDB for local; optional Postgres + S3 for cloud.
 - **Tests**: Vitest (unit), Playwright (e2e), bench script in CI.
 
@@ -161,10 +191,30 @@ amended in the same PR.
 - **Review cadence**: revisit quarterly. Drop principles that are no
   longer enforced. Tighten principles that have produced bugs.
 
-**Version**: 0.2.0 | **Ratified**: 2026-05-12 | **Last Amended**: 2026-05-12
+**Version**: 0.2.1 | **Ratified**: 2026-05-12 | **Last Amended**: 2026-05-13
 
 <!-- 0.2.0: Renderer changed from "WebGL2 default" to "WebGPU primary,
 WebGL2 fallback" following external CAD-architecture consultation.
 MINOR bump because the change adds a new compatibility constraint (the
-fallback path) rather than redefining a principle. -->
+fallback path) rather than redefining a principle.
+
+0.2.1 (2026-05-13): PATCH bump for clarifications and tech-stack fixes
+flagged in a second consultation:
+- Principle I expanded with the explicit 3-tier precision regime
+  (10⁶ / 10⁹ / >10⁹) replacing the bare "1e6 working area" phrasing.
+- Principle II parity gate reworded to "visual parity within
+  documented tolerance + feature parity matrix" rather than "visually
+  identical results" (the pixel-tolerance test was already the
+  enforceable form).
+- Renderer constraints add the line-rendering approach (instanced
+  extruded quads, analytic AA), sRGB color working space, and
+  PointerEvents-only input.
+- Geometry constraints split predicates (Shewchuk, unfacaded) from
+  booleans (Clipper2-WASM behind a facade); martinez and
+  polygon-clipping dropped.
+- File-format constraints fix PDFKit → pdf-lib and note the v2 binary
+  format roadmap.
+- Three.js permission struck (no 3D viewport spec exists; Principle
+  VII requires real callers before keeping the slot).
+-->
 
