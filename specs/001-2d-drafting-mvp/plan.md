@@ -400,9 +400,9 @@ single canonical implementations; codecs sit behind one facade each.
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| WebGPU shader behavior differs from WebGL2 fallback in edge cases (line caps, MSAA seams) | M | H | Render-parity e2e fixture in CI from Phase 1 day one. |
+| WebGPU shader behavior differs from WebGL2 fallback in edge cases (line caps, MSAA seams) | M | H | Per-pixel-tolerance parity test in CI from Phase 1 day one (T040/T041) plus a `packages/renderer/PARITY.md` feature matrix documenting any compute-only feature that degrades on WebGL2; absolute pixel-identity is explicitly NOT a gate. |
 | DXF entity coverage scope-creeps | H | M | Hard list in plan; everything outside is the FR-019 non-blocking warning batch. |
-| Float precision degrades past 1e6 units | M | H | Local-origin rebase per drawing; rebase on pan when the origin distance exceeds 5×10^5 units. Property test asserts predicate stability post-rebase. |
+| Float precision degrades in Tier B (10⁶–10⁹ units from local origin), and predicates lose robustness past ~10⁷ on raw inputs | M | H | Three-tier precision regime per Constitution Principle I: Tier A (0–10⁶) full precision, Tier B (10⁶–10⁹) documented degradation with automatic rebase on viewport center exceeding 5×10⁵ from the local origin, Tier C (>10⁹) refused at the kernel boundary. Property test (T021) asserts predicate stability after rebase across a synthetic 10⁹-unit drag. |
 | `pdf-lib` cannot do PDF OCG layers cleanly | L | M | Already validated in research.md; fallback is to emit PDF without layer groups and warn. |
 | Web Locks API absent on older browsers in scope | L | M | Detected at startup; on absence, fall back to BroadcastChannel coordination with a longer timeout. |
 | Spatial index rebuild thrashes during heavy edit | M | M | Two-tier index (immutable flatbush for the view, mutable rbush for the in-command edit set); commit triggers a single rebuild. |

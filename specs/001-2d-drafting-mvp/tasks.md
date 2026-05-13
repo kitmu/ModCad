@@ -177,9 +177,14 @@ story may begin until this phase passes its gates.
       `draw`, `pick`, `getStats`)
 - [ ] **T033 [F]** WebGPU backend skeleton at
       `packages/renderer/src/webgpu/backend.ts` with adapter request,
-      pipeline cache, MSAA 4×
+      pipeline cache, MSAA 4×, and an **sRGB-aware swapchain format**
+      (`bgra8unorm-srgb` preferred; fallback `rgba8unorm-srgb`) so
+      on-screen colors match sRGB-tagged PDF/PNG/SVG exports.
 - [ ] **T034 [F]** WebGL2 backend skeleton at
-      `packages/renderer/src/webgl2/backend.ts`
+      `packages/renderer/src/webgl2/backend.ts` configured to render
+      into an **sRGB framebuffer** (`gl.SRGB8_ALPHA8` for offscreen
+      targets; `EXT_sRGB` for the default framebuffer when
+      available) with matching gamma on output.
 - [ ] **T035 [F] [P]** Instanced fat-line pipeline (WebGPU + WebGL2):
       one extruded quad per segment, 4 vertices instanced, miter
       joins with bevel fallback past miter-limit, butt/round/square
@@ -237,15 +242,17 @@ story may begin until this phase passes its gates.
       constraints).
 - [ ] **T045 [F]** `StatusBar.tsx` showing coords, units, snap mode,
       scale, fps; `AriaLive.tsx` for selection + command summaries
-- [ ] **T046 [F]** First-run `UnitsDialog.tsx` per FR-015a, defaulting
-      to mm, persisting to IndexedDB
-- [ ] **T046a [F]** i18n wrapper set up at `apps/web/src/i18n/` using
+- [ ] **T046 [F]** i18n wrapper set up at `apps/web/src/i18n/` using
       `@formatjs/intl`: `en.json` message bundle, `<IntlProvider>`
       mounted at app root, message-extraction script in CI, ESLint
       rule banning raw string literals in JSX text and `aria-label`
       attributes. **Every user-facing string must go through this
-      wrapper from this task onward** (constitution Principle V "from
-      day one"; resolves analyze finding C1)
+      wrapper from this task onward, including T046a below**
+      (Constitution Principle V "from day one"). This task is a
+      hard prerequisite for any later Phase 2 task that ships JSX.
+- [ ] **T046a [F]** First-run `UnitsDialog.tsx` per FR-015a, defaulting
+      to mm, persisting to IndexedDB. All strings authored through
+      the i18n wrapper from T046.
 
 ### Codec scaffolding
 
@@ -506,6 +513,10 @@ lineweights; export DXF/SVG/PDF round-trip parity.
       POINT, TEXT, MTEXT, DIMENSION, LAYER, LTYPE) in
       `packages/codecs/src/dxf/read.ts`
 - [ ] **T101 [US5] [P]** DXF writer at `packages/codecs/src/dxf/write.ts`
+      covering the same entity set as the reader (LINE, LWPOLYLINE,
+      POLYLINE legacy 2D, CIRCLE, ARC, ELLIPSE, POINT, TEXT, MTEXT,
+      DIMENSION, LAYER, LTYPE) so the round-trip golden test in T097
+      exercises every supported entity in both directions
 - [ ] **T102 [US5]** DXF Web Worker wrapper via `comlink` so parsing
       large files doesn't block the main thread
 - [ ] **T103 [US5]** Non-blocking warning surface for unsupported

@@ -78,4 +78,8 @@ console.log(drawing.entities);
 - `packages/core/scene/Drawing.ts` — the document type
 - `packages/core/commands/CommandBus.ts` — execute / undo / redo
 - `packages/renderer/api.ts` — the only public renderer surface
+- `apps/web/src/routes/Workspace.tsx` — the active route hosting the
+  tab strip and the canvas surface
+- `apps/web/src/workspace/TabStrip.tsx` — in-app tab strip (FR-033)
+- `apps/web/src/workspace/DrawingSessionStore.ts` — per-slot state slices
 - `apps/web/src/canvas/CanvasHost.tsx` — where the UI meets the renderer

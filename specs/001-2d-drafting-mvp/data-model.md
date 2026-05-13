@@ -22,6 +22,7 @@ interface Drawing {
   units: Unit;
   precision: number;     // 0–6 decimal places, or fractional inches when units = "in" | "ft"
   originOffset: Vec2;    // rebased; user coordinates = entity coords + originOffset
+  precisionTier: "A" | "B" | "C";  // derived from current entity bbox vs. origin (Tier A: 0–1e6, Tier B: 1e6–1e9, Tier C: >1e9 refused at kernel boundary)
   layers: Layer[];
   layerOrder: Id[];      // explicit z-order; UI honors this
   currentLayerId: Id;
@@ -46,7 +47,19 @@ interface DrawingSettings {
   orthoMode: boolean;
   polarAngles: number[]; // radians, sorted
   snapModes: Set<SnapMode>;
+  pointStyle: { mode: PointStyleMode; size: number; sizeInPixels: boolean };
 }
+
+type PointStyleMode =
+  | "dot"           // single pixel
+  | "none"          // invisible (still selectable)
+  | "plus"
+  | "x"
+  | "tick"
+  | "circle"
+  | "square"
+  | "circle-plus"
+  | "square-x";
 ```
 
 ## Entity discriminated union
@@ -58,6 +71,7 @@ type Entity =
   | CircleEntity
   | ArcEntity
   | EllipseEntity
+  | PointEntity
   | TextEntity
   | DimensionEntity;
 
@@ -92,6 +106,13 @@ interface ArcEntity extends EntityBase {
 interface EllipseEntity extends EntityBase {
   kind: "ellipse";
   c: Vec2; major: Vec2; ratio: number; startParam: number; endParam: number;
+}
+
+interface PointEntity extends EntityBase {
+  kind: "point";
+  p: Vec2;
+  // styleOverride: when present, overrides DrawingSettings.pointStyle for this entity.
+  styleOverride?: { mode: PointStyleMode; size: number; sizeInPixels: boolean };
 }
 
 interface TextEntity extends EntityBase {
@@ -204,9 +225,39 @@ See `research.md` for the JSON envelope. Key invariants:
 
 ## Concurrency model
 
-- One drawing per tab (FR-033).
-- Web Locks API holds a single writer lock keyed by file path / OPFS
-  handle (FR-032). The lock is the *only* mechanism enforcing
-  single-writer; nothing else races.
-- Autosave writes to a separate slot (`autosave/<lockKey>`) keyed by
-  the same identifier so the user-explicit save is never clobbered.
+The v1 multi-document path is an **in-app tab strip** (FR-033). Each
+browser tab hosts a `DrawingSessionStore` with one slice per open
+drawing; slots in the strip share one WebGPU context, one command-bus
+implementation, and the global preferences store, but each owns an
+independent `Drawing`, `Selection`, and undo stack.
+
+- Coordination *between slots in the same browser tab* is handled by
+  the in-process command bus — Web Locks are NOT used in this path.
+  Only one slot may bind to a given file handle at a time; opening
+  the same file twice in the same tab focuses the existing slot.
+- Coordination *between separate browser tabs or windows* uses the
+  Web Locks API (FR-032). The lock is keyed by file path / OPFS
+  handle; second tab/window opens the file read-only with a "Take
+  over editing" affordance and force-transfer timeout. The lock is
+  the *only* mechanism enforcing cross-window single-writer; nothing
+  else races.
+- Autosave (FR-031) writes to OPFS at `autosave/<lockKey>/<iso>.modcad`
+  with the last 10 snapshots retained per file. The user-explicit
+  save is never clobbered because it lives at the file's own handle,
+  not under the autosave prefix.
+
+## Renderer-observable events
+
+The kernel exposes a small event surface for UI chrome:
+
+```ts
+type KernelEvent =
+  | { type: "origin-rebased"; from: Vec2; to: Vec2 }
+  | { type: "precision-tier-changed"; tier: "A" | "B" | "C" }
+  | { type: "context-lost" }   // GPU context loss (FR-034)
+  | { type: "context-restored"; durationMs: number };
+```
+
+The status bar (T045) listens for `precision-tier-changed` to surface
+the active tier indicator; the toast service listens for
+`context-lost` / `context-restored` to show the recovery notice.

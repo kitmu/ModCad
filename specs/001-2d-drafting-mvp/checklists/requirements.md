@@ -47,7 +47,10 @@ to plan.md per the constitution.
 4. Cross-tab unsaved changes — Web Locks API single-writer with
    "Take over editing" affordance and force-transfer timeout.
 5. Multi-document — one drawing per tab in v1; in-tab tabs and detached
-   windows deferred to post-v1.
+   windows deferred to post-v1. **REVERSED 2026-05-13** — see the
+   Second CAD-architecture consultation log below. FR-033 now mandates
+   an in-app tab strip; FR-032 Web Locks scope narrowed to "same file
+   in a separate browser tab/window".
 
 ### Post-clarify architectural refinements (Session 2026-05-12)
 
