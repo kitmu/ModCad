@@ -8,7 +8,12 @@
 // In-tab slots are coordinated by the in-process command bus only
 // (FR-032 narrowed). Web Locks gate same-file-in-another-window.
 import { create } from "zustand";
-import { newDrawing, type Drawing } from "@modcad/core";
+import {
+  CommandBus,
+  newDrawing,
+  type Command,
+  type Drawing,
+} from "@modcad/core";
 import { newId, type Id } from "@modcad/core";
 
 export interface DrawingSlice {
@@ -16,8 +21,7 @@ export interface DrawingSlice {
   name: string;
   drawing: Drawing;
   dirty: boolean;
-  // CommandBus etc. wire in once Phase 2 command-bus agent lands.
-  // Until then a slice is just a Drawing reference.
+  bus: CommandBus;
 }
 
 export interface DrawingSessionState {
@@ -31,23 +35,38 @@ export interface DrawingSessionState {
   reorder: (from: number, to: number) => void;
   /** FR-033 soft limit: warn callers when the next openNew would exceed 10. */
   isAtSoftLimit: () => boolean;
+
+  // Active-slice helpers — used by tools, file menu, and the e2e dev API.
+  /** Execute a one-shot command on the active slice. No-op if no active slice. */
+  applyCommand: (cmd: Command<unknown>) => void;
+  /** Re-pull the drawing snapshot from a slice's bus (after begin/sub-step/commit/cancel). */
+  syncFromBus: (id: Id) => void;
+  /** Replace the drawing entirely (used by file open and dev API). Clears dirty. */
+  replaceDrawing: (id: Id, drawing: Drawing, name?: string) => void;
+  /** Mark dirty/clean (used by save). */
+  setDirty: (id: Id, dirty: boolean) => void;
 }
 
 const SOFT_LIMIT = 10;
+
+function makeSlice(name?: string, drawing?: Drawing): DrawingSlice {
+  const d = drawing ?? newDrawing();
+  return {
+    id: newId(),
+    name: name ?? "Untitled",
+    drawing: d,
+    dirty: false,
+    bus: new CommandBus(d),
+  };
+}
 
 export const useDrawingSession = create<DrawingSessionState>((set, get) => ({
   slices: [],
   activeId: null,
   openNew: (name) => {
-    const id = newId();
-    const slice: DrawingSlice = {
-      id,
-      name: name ?? "Untitled",
-      drawing: newDrawing(),
-      dirty: false,
-    };
-    set((s) => ({ slices: [...s.slices, slice], activeId: id }));
-    return id;
+    const slice = makeSlice(name);
+    set((s) => ({ slices: [...s.slices, slice], activeId: slice.id }));
+    return slice.id;
   },
   close: (id) => {
     set((s) => {
@@ -73,4 +92,43 @@ export const useDrawingSession = create<DrawingSessionState>((set, get) => ({
     });
   },
   isAtSoftLimit: () => get().slices.length >= SOFT_LIMIT,
+
+  applyCommand: (cmd) => {
+    const { slices, activeId } = get();
+    const active = slices.find((s) => s.id === activeId);
+    if (!active) return;
+    active.bus.execute(cmd);
+    set({
+      slices: slices.map((s) =>
+        s.id === active.id ? { ...s, drawing: s.bus.drawing, dirty: true } : s,
+      ),
+    });
+  },
+  syncFromBus: (id) => {
+    set((s) => ({
+      slices: s.slices.map((sl) =>
+        sl.id === id ? { ...sl, drawing: sl.bus.drawing, dirty: true } : sl,
+      ),
+    }));
+  },
+  replaceDrawing: (id, drawing, name) => {
+    set((s) => ({
+      slices: s.slices.map((sl) =>
+        sl.id === id
+          ? {
+              ...sl,
+              drawing,
+              dirty: false,
+              bus: new CommandBus(drawing),
+              name: name ?? sl.name,
+            }
+          : sl,
+      ),
+    }));
+  },
+  setDirty: (id, dirty) => {
+    set((s) => ({
+      slices: s.slices.map((sl) => (sl.id === id ? { ...sl, dirty } : sl)),
+    }));
+  },
 }));

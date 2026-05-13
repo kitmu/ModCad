@@ -63,7 +63,48 @@ export {
   TierCRefusedError,
 } from "./scene/precisionRegime.js";
 export { CommandBus } from "./commands/CommandBus.js";
-export type { Command } from "./commands/CommandBus.js";
+export type { Command, SubStep } from "./commands/CommandBus.js";
+// Re-export immer's Draft so command authors (kernel + apps/web settings
+// commands) don't need a direct immer dependency. apply/inverse always
+// receive a Draft<Drawing>.
+export type { Draft } from "immer";
+export { drawLineCommand } from "./commands/draw/drawLine.js";
+export type { DrawLineParams } from "./commands/draw/drawLine.js";
+export { drawRectangleCommand } from "./commands/draw/drawRectangle.js";
+export type { DrawRectangleParams } from "./commands/draw/drawRectangle.js";
+export {
+  drawCircleCenterRadiusCommand,
+  drawCircle2PointCommand,
+  drawCircle3PointCommand,
+  CollinearError,
+} from "./commands/draw/drawCircle.js";
+export type {
+  DrawCircleCenterRadiusParams,
+  DrawCircle2PointParams,
+  DrawCircle3PointParams,
+} from "./commands/draw/drawCircle.js";
+export {
+  drawArcCenterEndsCommand,
+  drawArc3PointCommand,
+} from "./commands/draw/drawArc.js";
+export type {
+  DrawArcCenterEndsParams,
+  DrawArc3PointParams,
+} from "./commands/draw/drawArc.js";
+export {
+  drawPolylineCommand,
+  startPolyline,
+} from "./commands/draw/drawPolyline.js";
+export type {
+  DrawPolylineParams,
+  PolylineDraft,
+} from "./commands/draw/drawPolyline.js";
+export { drawEllipseCommand } from "./commands/draw/drawEllipse.js";
+export type { DrawEllipseParams } from "./commands/draw/drawEllipse.js";
+export { drawPointCommand } from "./commands/draw/drawPoint.js";
+export type { DrawPointParams } from "./commands/draw/drawPoint.js";
+export { parseCoord } from "./commands/parseCoord.js";
+export type { ParseContext, ParseResult } from "./commands/parseCoord.js";
 export { originRebaseCommand } from "./scene/originRebase.js";
 export { DimensionGraph } from "./scene/dimensionGraph.js";
 export { buildStaticIndex, DynamicIndex } from "./index/SpatialIndex.js";
