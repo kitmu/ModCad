@@ -59,6 +59,17 @@ export default [
     rules: { "no-console": "off" },
   },
   {
+    // Vendored upstream code we don't reformat — keep the original style
+    // so future syncs are clean diffs.
+    files: ["packages/core/src/geometry/predicates.ts"],
+    rules: {
+      "prefer-const": "off",
+      "no-var": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+  {
     ignores: [
       "**/node_modules/**",
       "**/dist/**",
@@ -67,6 +78,7 @@ export default [
       "**/.vite/**",
       "**/playwright-report/**",
       "**/test-results/**",
+      "**/.claude/worktrees/**",
       "tooling/smoke/**",
     ],
   },

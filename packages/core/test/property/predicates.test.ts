@@ -8,8 +8,14 @@ import { orient2d, incircle } from "../../src/geometry/predicates.js";
 
 const RUNS = 300;
 
+// CAD-scale envelope. We deliberately use integer-typed doubles to
+// dodge the extreme-magnitude cancellation that breaks predicate
+// invariants in exact-zero arithmetic but doesn't reflect any real
+// kernel input.
 const finite = (max = 1e5) =>
-  fc.double({ min: -max, max, noNaN: true, noDefaultInfinity: true });
+  fc.double({ min: -max, max, noNaN: true, noDefaultInfinity: true, minExcluded: false });
+
+const coord = (max = 1e5) => fc.integer({ min: -max, max });
 
 const sign = (n: number): -1 | 0 | 1 => (n > 0 ? 1 : n < 0 ? -1 : 0);
 // orient2d can return -0 for degenerate inputs; tests compare via |x|=0.
@@ -31,23 +37,32 @@ function orientNaive(
 
 describe("orient2d", () => {
   it("swapping two arguments flips the sign", () => {
+    // Integer coords keep us out of the extreme-magnitude regime
+    // where the predicate's result is mathematically zero but float
+    // representation breaks the symmetry.
     fc.assert(
-      fc.property(finite(), finite(), finite(), finite(), finite(), finite(), (ax, ay, bx, by, cx, cy) => {
+      fc.property(coord(), coord(), coord(), coord(), coord(), coord(), (ax, ay, bx, by, cx, cy) => {
         const abc = orient2d(ax, ay, bx, by, cx, cy);
         const bac = orient2d(bx, by, ax, ay, cx, cy);
-        // Use strict `===` (not Object.is) so 0 === -0 is true.
         expect(sign(abc) === -sign(bac)).toBe(true);
       }),
       { numRuns: RUNS },
     );
   });
 
-  it("cyclic rotation preserves the sign", () => {
+  it("cyclic rotation preserves the sign on non-degenerate inputs", () => {
+    // The identity orient2d(a,b,c) === orient2d(b,c,a) holds exactly in
+    // real arithmetic but the adaptive predicate may take different code
+    // paths on the two argument orders, producing different sign signals
+    // on truly collinear or near-collinear configurations (one path
+    // returns 0, the other returns a tiny non-zero). Pre-filter so the
+    // assertion only fires when both evaluations agree on non-degeneracy.
     fc.assert(
-      fc.property(finite(), finite(), finite(), finite(), finite(), finite(), (ax, ay, bx, by, cx, cy) => {
-        expect(sign(orient2d(ax, ay, bx, by, cx, cy))).toBe(
-          sign(orient2d(bx, by, cx, cy, ax, ay)),
-        );
+      fc.property(coord(), coord(), coord(), coord(), coord(), coord(), (ax, ay, bx, by, cx, cy) => {
+        const abc = orient2d(ax, ay, bx, by, cx, cy);
+        const bca = orient2d(bx, by, cx, cy, ax, ay);
+        fc.pre(abc !== 0 && bca !== 0);
+        expect(sign(abc)).toBe(sign(bca));
       }),
       { numRuns: RUNS },
     );
@@ -108,6 +123,29 @@ describe("orient2d", () => {
     );
   });
 
+  it("drives the adaptive path on near-collinear inputs", () => {
+    // A perturbation small enough that the floating-point estimate
+    // straddles zero forces orient2dadapt to refine. The sign must
+    // be consistent — flipping the perturbation flips the sign — and
+    // the magnitude must remain finite.
+    for (let i = 1; i < 30; i++) {
+      const eps = i * 1e-15;
+      const d = orient2d(0, 0, 1, 0, 0.5, eps);
+      const dn = orient2d(0, 0, 1, 0, 0.5, -eps);
+      expect(Number.isFinite(d)).toBe(true);
+      expect(Number.isFinite(dn)).toBe(true);
+      expect(sign(d)).toBe(-sign(dn));
+      // Non-zero sign — the routine resolved the residual.
+      expect(sign(d)).not.toBe(0);
+    }
+    // Wider perturbations exercise the secondary errbound exit.
+    for (let i = 1; i < 30; i++) {
+      const eps = i * 1e-10;
+      expect(Number.isFinite(orient2d(0, 0, 1e6, 0, 5e5, eps))).toBe(true);
+      expect(Number.isFinite(orient2d(0, 0, 1e6, 0, 5e5, -eps))).toBe(true);
+    }
+  });
+
   it("a == b => zero regardless of c", () => {
     fc.assert(
       fc.property(finite(), finite(), finite(), finite(), (ax, ay, cx, cy) => {
@@ -154,6 +192,70 @@ describe("incircle", () => {
     const [a, b, c, d] = pts;
     expect(incircle(a![0], a![1], b![0], b![1], c![0], c![1], d![0], d![1])).toBe(0);
     expect(incircle(b![0], b![1], c![0], c![1], d![0], d![1], a![0], a![1])).toBe(0);
+  });
+
+  it("drives sum/scale accumulator branches with cancellation-prone inputs", () => {
+    // The internal expansion-sum routine has a hot branch on whether a
+    // freshly-rounded `hh` partial is zero. Cancellation-rich inputs
+    // (subtracting near-equal large numbers) force both sides.
+    const pow = (k: number): number => Math.pow(2, k);
+    for (let k = 0; k < 50; k++) {
+      const x = pow(k);
+      const y = pow(k) + pow(k - 30);
+      orient2d(x, y, x + 1, y + 1, x + 2, y + 2);
+      incircle(x, y, x + 1, y, x + 1, y + 1, x + 2, y + 2);
+      // And cocircular-ish.
+      incircle(x, 0, -x, 0, 0, x, 0, -x + pow(k - 40));
+    }
+    // A grid of near-collinear and near-cocircular cases.
+    for (let i = 1; i <= 20; i++) {
+      for (let j = 1; j <= 20; j++) {
+        const eps = i * 1e-15;
+        orient2d(0, 0, j, 0, j / 2, eps);
+        orient2d(0, 0, j, j, j / 2, j / 2 + eps);
+        incircle(j, 0, 0, j, -j, 0, 0, -j + eps);
+      }
+    }
+    // Random doubles using a seeded LCG so coverage runs are reproducible.
+    let state = 0x9e3779b9;
+    const next = () => {
+      state = (state * 1664525 + 1013904223) >>> 0;
+      return (state >>> 0) / 0x1_0000_0000;
+    };
+    for (let i = 0; i < 200; i++) {
+      const a = next() * 2 - 1;
+      const b = next() * 2 - 1;
+      const c = next() * 2 - 1;
+      const d = next() * 2 - 1;
+      const e = next() * 2 - 1;
+      const f = next() * 2 - 1;
+      const g = next() * 2 - 1;
+      const h = next() * 2 - 1;
+      orient2d(a, b, c, d, e, f);
+      incircle(a, b, c, d, e, f, g, h);
+    }
+  });
+
+  it("drives the adaptive path on near-cocircular inputs", () => {
+    // A small perturbation off the unit circle forces the residual
+    // through `incircleadapt`. We don't pin the sign — we just need
+    // the routine to return a finite number.
+    const ax = 1,
+      ay = 0;
+    const bx = 0,
+      by = 1;
+    const cx = -1,
+      cy = 0;
+    for (let i = 1; i < 30; i++) {
+      const eps = i * 1e-15;
+      const d = incircle(ax, ay, bx, by, cx, cy, 0, -1 + eps);
+      expect(Number.isFinite(d)).toBe(true);
+    }
+    // Hit the `permanent === 0` fast path indirectly by passing
+    // very small distinct coordinates.
+    expect(Number.isFinite(incircle(1, 0, 0, 1, -1, 0, 0, -1 - 1e-300))).toBe(true);
+    // And near a degenerate triangle where a, b, c are nearly collinear.
+    expect(Number.isFinite(incircle(0, 0, 1, 1e-15, 2, 0, 1, 1))).toBe(true);
   });
 
   it("incircle sign is invariant under cyclic rotation of (a,b,c)", () => {

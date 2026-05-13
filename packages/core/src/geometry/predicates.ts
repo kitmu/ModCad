@@ -307,7 +307,7 @@ export function orient2d(
   const detsum = Math.abs(detleft + detright);
   if (Math.abs(det) >= ccwerrboundA * detsum) return det;
 
-  return -orient2dadapt(ax, ay, bx, by, cx, cy, detsum);
+  return orient2dadapt(ax, ay, bx, by, cx, cy, detsum);
 }
 
 // --- incircle.js -----------------------------------------------------------

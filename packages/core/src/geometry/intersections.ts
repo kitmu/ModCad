@@ -44,6 +44,11 @@ export function segIntersect(
     return [a1[0] + t * dxA, a1[1] + t * dyA];
   }
 
+  // Fully collinear (all four orient2d signs are zero): per the
+  // docstring, overlap is not reported. Callers needing overlap-aware
+  // behaviour must detect collinearity themselves.
+  if (o1 === 0 && o2 === 0 && o3 === 0 && o4 === 0) return null;
+
   // Degenerate cases: one endpoint lies exactly on the other segment.
   if (o1 === 0 && onSegment(a1, a2, b1)) return [b1[0], b1[1]];
   if (o2 === 0 && onSegment(a1, a2, b2)) return [b2[0], b2[1]];

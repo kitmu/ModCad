@@ -62,3 +62,15 @@ export {
   assertTierBOrBetter,
   TierCRefusedError,
 } from "./scene/precisionRegime.js";
+export { CommandBus } from "./commands/CommandBus.js";
+export type { Command } from "./commands/CommandBus.js";
+export { originRebaseCommand } from "./scene/originRebase.js";
+export { DimensionGraph } from "./scene/dimensionGraph.js";
+export { buildStaticIndex, DynamicIndex } from "./index/SpatialIndex.js";
+export type { SpatialIndex } from "./index/SpatialIndex.js";
+export { SnapEngine } from "./snap/SnapEngine.js";
+export type {
+  SnapCandidate,
+  SnapEngineOptions,
+  SnapStrength,
+} from "./snap/SnapEngine.js";

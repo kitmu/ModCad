@@ -31,10 +31,12 @@ function normalizeAngle(a: number): number {
 
 /**
  * True when angle `theta` is swept by the arc going CCW from
- * `startAngle` to `endAngle`. Both inputs are normalized first so we
- * tolerate arbitrary signed inputs.
+ * `startAngle` to `endAngle`. Tolerates arbitrary signed inputs. A
+ * sweep of 2π or more is treated as a full revolution — every angle
+ * is in the sweep.
  */
 function angleInSweep(theta: number, startAngle: number, endAngle: number): boolean {
+  if (endAngle - startAngle >= TAU - 1e-12) return true;
   const s = normalizeAngle(startAngle);
   const e = normalizeAngle(endAngle);
   const t = normalizeAngle(theta);

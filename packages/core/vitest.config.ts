@@ -7,10 +7,19 @@ export default mergeConfig(
     test: {
       include: ["src/**/*.test.ts", "test/**/*.test.ts"],
       coverage: {
+        // Per-file thresholds enforce robustness gates for the most
+        // safety-critical kernel files. Constitution Principle I +
+        // Principle IV.
+        //
+        // - geometry/predicates.ts: 95 line / 100 branch (T018)
+        // - command bus: 100 / 100 (to be added with T023)
         thresholds: {
-          // Per constitution Principle IV + analyze finding C3:
-          // - geometry predicates: 95 line / 100 branch (per-file gate below)
-          // - command bus: 100 / 100 (per-file gate below)
+          "src/geometry/predicates.ts": {
+            lines: 95,
+            branches: 100,
+            functions: 100,
+            statements: 95,
+          },
         },
       },
     },
