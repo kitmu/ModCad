@@ -14,6 +14,31 @@ import {
 import { readDxf } from "../src/dxf/read.js";
 import { writeDxf } from "../src/dxf/write.js";
 
+function dxfBlock(...groups: Array<string | number>): string {
+  // Helper: build a DXF text from (code, value) pairs.
+  const lines: string[] = [];
+  for (let i = 0; i < groups.length; i += 2) {
+    lines.push(String(groups[i]));
+    lines.push(String(groups[i + 1]));
+  }
+  return lines.join("\n") + "\n";
+}
+
+function wrapEntities(entities: string): string {
+  // Wrap raw entity-group text in minimal SECTION TABLES/ENTITIES envelope.
+  return [
+    "0\nSECTION\n2\nHEADER\n0\nENDSEC",
+    "0\nSECTION\n2\nTABLES",
+    "0\nTABLE\n2\nLAYER\n70\n1\n0\nLAYER\n2\n0\n70\n0\n62\n7\n6\nCONTINUOUS\n370\n25\n0\nENDTAB",
+    "0\nENDSEC",
+    "0\nSECTION\n2\nENTITIES",
+    entities.trim(),
+    "0\nENDSEC",
+    "0\nEOF",
+    "",
+  ].join("\n");
+}
+
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtureDxf = resolve(here, "../../../fixtures/dxf/sample.dxf");
 
@@ -146,5 +171,125 @@ describe("dxf round-trip", () => {
     if (a !== b) {
       throw new Error(`round-trip mismatch:\n  orig=${a}\n  round=${b}`);
     }
+  });
+});
+
+describe("dxf reader — expanded entity coverage", () => {
+  it("parses TEXT with alignment + style", () => {
+    const dxf = wrapEntities(
+      dxfBlock(
+        0, "TEXT",
+        8, "0",
+        10, 1.0,
+        20, 2.0,
+        40, 2.5,
+        1, "hello",
+        50, 90,
+        7, "ARIAL",
+        72, 1,
+        73, 2,
+      ),
+    );
+    const { drawing, warnings } = readDxf(dxf);
+    if (warnings.length !== 0) throw new Error(`unexpected: ${JSON.stringify(warnings)}`);
+    const e = drawing.entityOrder.map((id) => drawing.entities[id])[0];
+    if (!e || e.kind !== "text") throw new Error("text not parsed");
+    if (e.value !== "hello") throw new Error(`value: ${e.value}`);
+    if (e.height !== 2.5) throw new Error(`height: ${e.height}`);
+    if (Math.abs(e.rotation - Math.PI / 2) > 1e-9) throw new Error(`rotation: ${e.rotation}`);
+    if (e.align !== "mc") throw new Error(`align: ${e.align}`);
+  });
+
+  it("parses MTEXT, strips formatting, emits a warning", () => {
+    const dxf = wrapEntities(
+      dxfBlock(
+        0, "MTEXT",
+        8, "0",
+        10, 0.0,
+        20, 0.0,
+        40, 1.0,
+        71, 1,
+        1, "\\C1;hot \\Pline2",
+        7, "STANDARD",
+      ),
+    );
+    const { drawing, warnings } = readDxf(dxf);
+    const e = drawing.entityOrder.map((id) => drawing.entities[id])[0];
+    if (!e || e.kind !== "text") throw new Error("mtext not parsed");
+    if (e.value !== "hot \nline2") throw new Error(`mtext value: ${JSON.stringify(e.value)}`);
+    const fmt = warnings.find((w) => w.kind === "mtext-formatting-stripped");
+    if (!fmt) throw new Error("expected mtext-formatting-stripped warning");
+  });
+
+  it("parses DIMENSION with linear variant + emits unresolved-ref warning", () => {
+    const dxf = wrapEntities(
+      dxfBlock(
+        0, "DIMENSION",
+        8, "0",
+        10, 5.0, 20, 8.0,
+        11, 5.0, 21, 8.0,
+        13, 0.0, 23, 0.0,
+        14, 10.0, 24, 0.0,
+        70, 0,
+        3, "STANDARD",
+        50, 0,
+      ),
+    );
+    const { drawing, warnings } = readDxf(dxf);
+    const e = drawing.entityOrder.map((id) => drawing.entities[id])[0];
+    if (!e || e.kind !== "dimension") throw new Error("dimension not parsed");
+    if (e.variant !== "linear") throw new Error(`variant: ${e.variant}`);
+    if (!warnings.some((w) => w.kind === "unresolved-dimension-ref"))
+      throw new Error("expected unresolved-dimension-ref warning");
+  });
+
+  it("parses legacy POLYLINE → VERTEX → SEQEND into a polyline entity", () => {
+    const dxf = wrapEntities(
+      [
+        "0\nPOLYLINE\n8\n0\n66\n1\n70\n0",
+        "0\nVERTEX\n8\n0\n10\n0.0\n20\n0.0",
+        "0\nVERTEX\n8\n0\n10\n5.0\n20\n0.0\n42\n0.5",
+        "0\nVERTEX\n8\n0\n10\n10.0\n20\n5.0",
+        "0\nSEQEND",
+      ].join("\n"),
+    );
+    const { drawing, warnings } = readDxf(dxf);
+    if (warnings.length !== 0) throw new Error(`unexpected: ${JSON.stringify(warnings)}`);
+    const e = drawing.entityOrder.map((id) => drawing.entities[id])[0];
+    if (!e || e.kind !== "polyline") throw new Error("polyline not parsed");
+    if (e.vertices.length !== 3) throw new Error(`vertices: ${e.vertices.length}`);
+    if (e.vertices[1]?.bulge !== 0.5) throw new Error(`bulge: ${e.vertices[1]?.bulge}`);
+  });
+
+  it("parses ELLIPSE with major axis + parameter range", () => {
+    const dxf = wrapEntities(
+      dxfBlock(
+        0, "ELLIPSE",
+        8, "0",
+        10, 1.0, 20, 2.0,
+        11, 3.0, 21, 0.0,
+        40, 0.5,
+        41, 0.0,
+        42, 6.283185307,
+      ),
+    );
+    const { drawing, warnings } = readDxf(dxf);
+    if (warnings.length !== 0) throw new Error(`unexpected: ${JSON.stringify(warnings)}`);
+    const e = drawing.entityOrder.map((id) => drawing.entities[id])[0];
+    if (!e || e.kind !== "ellipse") throw new Error("ellipse not parsed");
+    if (e.c[0] !== 1 || e.c[1] !== 2) throw new Error(`center: ${e.c.toString()}`);
+    if (e.major[0] !== 3 || e.major[1] !== 0) throw new Error(`major: ${e.major.toString()}`);
+    if (e.ratio !== 0.5) throw new Error(`ratio: ${e.ratio}`);
+  });
+
+  it("emits unsupported-entity warning for unknown entity types", () => {
+    const dxf = wrapEntities(
+      dxfBlock(
+        0, "SPLINE", 8, "0", 10, 0.0, 20, 0.0,
+      ),
+    );
+    const { warnings } = readDxf(dxf);
+    const u = warnings.find((w) => w.kind === "unsupported-entity");
+    if (!u) throw new Error("expected unsupported-entity warning");
   });
 });

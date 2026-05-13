@@ -2,10 +2,17 @@
 // Save As / Recent. The Recent submenu reads from IndexedDB once T108
 // (autosave restore) lands its handle cache; for US1 it stays empty.
 import { useState } from "react";
-import { newDrawing, openDrawingFromDisk, saveActiveDrawing } from "./fileActions.js";
+import {
+  newDrawing,
+  openDrawingFromDisk,
+  saveActiveDrawing,
+  importDxfFromDisk,
+} from "./fileActions.js";
+import { ExportDialog } from "./ExportDialog.js";
 
 export function FileMenu(): JSX.Element {
   const [open, setOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   return (
     <div
       data-testid="file-menu"
@@ -50,6 +57,13 @@ export function FileMenu(): JSX.Element {
             }}
           />
           <MenuItem
+            label="Import DXF…"
+            onClick={() => {
+              setOpen(false);
+              void importDxfFromDisk();
+            }}
+          />
+          <MenuItem
             label="Save"
             onClick={() => {
               setOpen(false);
@@ -63,6 +77,13 @@ export function FileMenu(): JSX.Element {
               void saveActiveDrawing();
             }}
           />
+          <MenuItem
+            label="Export…"
+            onClick={() => {
+              setOpen(false);
+              setExportOpen(true);
+            }}
+          />
           <li
             role="menuitem"
             data-testid="file-menu-recent"
@@ -72,6 +93,7 @@ export function FileMenu(): JSX.Element {
           </li>
         </ul>
       ) : null}
+      <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
     </div>
   );
 }

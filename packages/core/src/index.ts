@@ -109,6 +109,36 @@ export { CommandRegistry, builtinRegistry } from "./commands/registry.js";
 export type { CommandDefinition } from "./commands/registry.js";
 export { originRebaseCommand } from "./scene/originRebase.js";
 export { DimensionGraph } from "./scene/dimensionGraph.js";
+export {
+  defaultDimensionStyle,
+  getDimensionStyle,
+  createDimensionStyleCommand,
+} from "./scene/dimensionStyle.js";
+export type {
+  DimensionStyle,
+  DimensionArrowType,
+  CreateDimensionStyleParams,
+  CreateDimensionStyleResult,
+} from "./scene/dimensionStyle.js";
+export {
+  recomputeDimensionGeometry,
+  resolveEntityPoint,
+  formatDimensionValue,
+} from "./scene/dimensionGeometry.js";
+export type { DimensionGeometry } from "./scene/dimensionGeometry.js";
+export { alignedDimensionCommand } from "./commands/dimension/aligned.js";
+export type { AlignedDimensionParams } from "./commands/dimension/aligned.js";
+export { linearHDimensionCommand } from "./commands/dimension/linearH.js";
+export type { LinearHDimensionParams } from "./commands/dimension/linearH.js";
+export { linearVDimensionCommand } from "./commands/dimension/linearV.js";
+export type { LinearVDimensionParams } from "./commands/dimension/linearV.js";
+export { angularDimensionCommand } from "./commands/dimension/angular.js";
+export type { AngularDimensionParams } from "./commands/dimension/angular.js";
+export { radialDimensionCommand } from "./commands/dimension/radial.js";
+export type { RadialDimensionParams } from "./commands/dimension/radial.js";
+export { diameterDimensionCommand } from "./commands/dimension/diameter.js";
+export type { DiameterDimensionParams } from "./commands/dimension/diameter.js";
+export { entityIdsForRef } from "./commands/dimension/bindRefs.js";
 export { buildStaticIndex, DynamicIndex } from "./index/SpatialIndex.js";
 export type { SpatialIndex } from "./index/SpatialIndex.js";
 export {

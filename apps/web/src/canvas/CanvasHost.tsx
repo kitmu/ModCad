@@ -40,6 +40,7 @@ import { EllipseTool } from "../tools/EllipseTool.js";
 import { PointTool } from "../tools/PointTool.js";
 import { MoveTool } from "../tools/MoveTool.js";
 import { TrimTool } from "../tools/TrimTool.js";
+import { MeasureTool } from "../tools/MeasureTool.js";
 import type { Tool, ToolContext } from "../tools/Tool.js";
 import { saveActiveDrawing, openDrawingFromDisk } from "../files/fileActions.js";
 import { commandRouter } from "../palette/commandRouter.js";
@@ -253,6 +254,8 @@ export function CanvasHost(): null {
       // US6 modify tools.
       commandRouter.register("modify.move", () => activateTool(new MoveTool()));
       commandRouter.register("modify.trim", () => activateTool(new TrimTool()));
+      // US4 measure tool.
+      commandRouter.register("measure", () => activateTool(new MeasureTool()));
       commandRouter.register("view.fit", () => fitDrawing());
       commandRouter.register("file.new", () => {
         useDrawingSession.getState().openNew();

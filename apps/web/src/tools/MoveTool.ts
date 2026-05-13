@@ -53,7 +53,16 @@ export class MoveTool implements Tool {
 
   onPointerMove(p: PointerSample): void {
     const hit = snapEndpoint(p.world, this.ctx.bus.drawing, 1);
-    useSnapState.getState().set(hit ? hit.point : null);
+    if (hit) {
+      useSnapState.getState().setMarker({
+        point: hit.point,
+        mode: hit.mode,
+        strength: hit.strength,
+        lastCommittedPoint: this.basePoint,
+      });
+    } else {
+      useSnapState.getState().setMarker(null);
+    }
   }
 
   onPointerDown(p: PointerSample): void {
@@ -75,14 +84,14 @@ export class MoveTool implements Tool {
     this.ctx.bus.execute(moveCommand({ ids: this.ids, delta }));
     this.ctx.syncDirty();
     useCommandState.getState().clear();
-    useSnapState.getState().set(null);
+    useSnapState.getState().setMarker(null);
     this.ctx.done();
   }
 
   onKeydown(e: KeyboardEvent): void {
     if (e.key === "Escape") {
       useCommandState.getState().clear();
-      useSnapState.getState().set(null);
+      useSnapState.getState().setMarker(null);
       this.ctx.done();
     }
   }

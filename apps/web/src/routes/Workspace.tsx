@@ -19,6 +19,12 @@ import { NotificationsToaster } from "../panels/NotificationsToaster.js";
 import { installDevApi } from "../devApi.js";
 import { Grips } from "../grips/Grips.js";
 import { HistoryPanel } from "../panels/HistoryPanel.js";
+import { createAutosaveService } from "../files/autosave.js";
+import { installTabKeyboard } from "../workspace/tabKeyboard.js";
+import { TakeoverDialog } from "../files/TakeoverDialog.js";
+import { SnapOverlay } from "../canvas/SnapOverlay.js";
+import { MeasureOverlay } from "../canvas/MeasureOverlay.js";
+import { DimensionOverlay } from "../canvas/DimensionOverlay.js";
 
 export function Workspace() {
   const slices = useDrawingSession((s) => s.slices);
@@ -33,6 +39,17 @@ export function Workspace() {
   // Mount the dev/test introspection API (T044 dev hook for Playwright).
   useEffect(() => {
     installDevApi();
+  }, []);
+
+  // T108 autosave service + T112 tab-strip keyboard cycle.
+  useEffect(() => {
+    const svc = createAutosaveService({ sessionStore: useDrawingSession });
+    svc.start();
+    const offKb = installTabKeyboard();
+    return () => {
+      svc.stop();
+      offKb();
+    };
   }, []);
 
   return (
@@ -56,7 +73,10 @@ export function Workspace() {
             style={{ width: "100%", height: "100%", display: "block" }}
           />
           <CanvasHost />
+          <DimensionOverlay />
           <Grips />
+          <SnapOverlay />
+          <MeasureOverlay />
           <AriaLive />
         </div>
         {sidebarOpen && (
@@ -82,6 +102,7 @@ export function Workspace() {
       <BindingsReference />
       <PaletteKeyboard />
       <NotificationsToaster />
+      <TakeoverDialog />
     </div>
   );
 }

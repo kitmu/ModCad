@@ -29,6 +29,10 @@
 //    so consumers have a single subscription point.
 import { produce, freeze, type Draft } from "immer";
 import type { Drawing, KernelEvent } from "../scene/types.js";
+import { DimensionGraph } from "../scene/dimensionGraph.js";
+import {
+  setActiveDimensionGraph,
+} from "./dimension/bindRefs.js";
 
 export interface SubStep {
   apply(draft: Draft<Drawing>): void;
@@ -68,6 +72,12 @@ export class CommandBus {
   private readonly redoStack: UndoEntry[] = [];
   private inFlight: InFlight | null = null;
   private readonly listeners = new Set<KernelEventListener>();
+  /**
+   * Dimension dependency graph (FR-014). One per bus; dimension commands
+   * mutate it via the active-graph hook in commands/dimension/bindRefs.ts.
+   * Rebuilt on load (codec) — initially empty for a fresh drawing.
+   */
+  readonly dimensionGraph: DimensionGraph = new DimensionGraph();
 
   constructor(initial: Drawing) {
     this.current = freeze(initial, true);
@@ -77,17 +87,28 @@ export class CommandBus {
     return this.current;
   }
 
+  private withActiveGraph<T>(fn: () => T): T {
+    setActiveDimensionGraph(this.dimensionGraph);
+    try {
+      return fn();
+    } finally {
+      setActiveDimensionGraph(null);
+    }
+  }
+
   execute<T>(cmd: Command<T>): void {
     if (this.inFlight) {
       throw new Error(
         `cannot execute("${cmd.name}") while command "${this.inFlight.cmd.name}" is in flight`,
       );
     }
-    this.current = produce(this.current, (draft) => {
-      cmd.apply(draft);
-      if (cmd.subSteps) {
-        for (const s of cmd.subSteps) s.apply(draft);
-      }
+    this.withActiveGraph(() => {
+      this.current = produce(this.current, (draft) => {
+        cmd.apply(draft);
+        if (cmd.subSteps) {
+          for (const s of cmd.subSteps) s.apply(draft);
+        }
+      });
     });
     this.undoStack.push({
       cmd: cmd as Command<unknown>,
@@ -105,11 +126,13 @@ export class CommandBus {
     }
     const entry = this.undoStack.pop();
     if (!entry) return false;
-    this.current = produce(this.current, (draft) => {
-      for (let i = entry.subSteps.length - 1; i >= 0; i--) {
-        entry.subSteps[i]!.inverse(draft);
-      }
-      entry.cmd.inverse(draft);
+    this.withActiveGraph(() => {
+      this.current = produce(this.current, (draft) => {
+        for (let i = entry.subSteps.length - 1; i >= 0; i--) {
+          entry.subSteps[i]!.inverse(draft);
+        }
+        entry.cmd.inverse(draft);
+      });
     });
     this.redoStack.push(entry);
     return true;
@@ -119,9 +142,11 @@ export class CommandBus {
     if (this.inFlight) return false;
     const entry = this.redoStack.pop();
     if (!entry) return false;
-    this.current = produce(this.current, (draft) => {
-      entry.cmd.apply(draft);
-      for (const s of entry.subSteps) s.apply(draft);
+    this.withActiveGraph(() => {
+      this.current = produce(this.current, (draft) => {
+        entry.cmd.apply(draft);
+        for (const s of entry.subSteps) s.apply(draft);
+      });
     });
     this.undoStack.push(entry);
     return true;
@@ -134,8 +159,10 @@ export class CommandBus {
       );
     }
     const preBegin = this.current;
-    this.current = produce(this.current, (draft) => {
-      cmd.apply(draft);
+    this.withActiveGraph(() => {
+      this.current = produce(this.current, (draft) => {
+        cmd.apply(draft);
+      });
     });
     this.inFlight = {
       cmd: cmd as Command<unknown>,
@@ -148,8 +175,10 @@ export class CommandBus {
     if (!this.inFlight) {
       throw new Error("pushSubStep called with no command in flight");
     }
-    this.current = produce(this.current, (draft) => {
-      step.apply(draft);
+    this.withActiveGraph(() => {
+      this.current = produce(this.current, (draft) => {
+        step.apply(draft);
+      });
     });
     this.inFlight.subSteps.push(step);
   }
@@ -158,8 +187,10 @@ export class CommandBus {
     if (!this.inFlight) return false;
     const step = this.inFlight.subSteps.pop();
     if (!step) return false;
-    this.current = produce(this.current, (draft) => {
-      step.inverse(draft);
+    this.withActiveGraph(() => {
+      this.current = produce(this.current, (draft) => {
+        step.inverse(draft);
+      });
     });
     return true;
   }

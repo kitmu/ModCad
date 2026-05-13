@@ -27,15 +27,21 @@ import type { Drawing } from "@modcad/core";
 import { writeModcad, readModcad } from "@modcad/codecs";
 import { useDrawingSession } from "../workspace/DrawingSessionStore.js";
 import { idbGet, idbSet } from "../storage/idb.js";
+import { useAutosaveState } from "../state/autosaveState.js";
 
 const RETENTION = 10;
 const DEBOUNCE_MS = 30_000;
 
+/**
+ * Public snapshot shape required by the AutosaveService contract.
+ * `bytes` is loaded on demand; readers should call `restore(handleKey,
+ * iso)` if they need them.
+ */
 export interface AutosaveSnapshot {
-  lockKey: string;
-  iso: string;
-  /** Best-effort: only present if the snapshot has been read into memory. */
-  bytes?: Uint8Array;
+  handleKey: string;
+  isoTimestamp: string;
+  bytes: Uint8Array;
+  bytesGzipped: boolean;
 }
 
 /* ────────────── OPFS detection / typed surface ────────────── */
@@ -248,9 +254,15 @@ async function idbDeleteLockKey(lockKey: string): Promise<void> {
 
 /* ────────────── public API ────────────── */
 
+/** Internal listing entry; the public {@link AutosaveSnapshot} carries bytes. */
+export interface AutosaveEntry {
+  lockKey: string;
+  iso: string;
+}
+
 export async function listAutosavesFor(
   lockKey: string,
-): Promise<AutosaveSnapshot[]> {
+): Promise<AutosaveEntry[]> {
   const root = await getOpfsRoot();
   const isos = root
     ? await opfsListSnapshots(root, lockKey)
@@ -265,25 +277,22 @@ export async function listAllAutosaveLockKeys(): Promise<string[]> {
 }
 
 export async function readAutosaveBytes(
-  snapshot: AutosaveSnapshot,
+  entry: AutosaveEntry,
 ): Promise<Uint8Array | null> {
-  if (snapshot.bytes) return snapshot.bytes;
   const root = await getOpfsRoot();
   return root
-    ? opfsReadSnapshot(root, snapshot.lockKey, snapshot.iso)
-    : idbReadSnapshot(snapshot.lockKey, snapshot.iso);
+    ? opfsReadSnapshot(root, entry.lockKey, entry.iso)
+    : idbReadSnapshot(entry.lockKey, entry.iso);
 }
 
 /** FR-031 restore: push the snapshot's drawing into a new slot. */
-export async function restoreAutosave(
-  snapshot: AutosaveSnapshot,
-): Promise<boolean> {
-  const bytes = await readAutosaveBytes(snapshot);
+export async function restoreAutosave(entry: AutosaveEntry): Promise<boolean> {
+  const bytes = await readAutosaveBytes(entry);
   if (!bytes) return false;
   const { drawing } = readModcad(bytes);
   const sess = useDrawingSession.getState();
-  const id = sess.openNew(snapshot.lockKey);
-  sess.replaceDrawing(id, drawing, snapshot.lockKey);
+  const id = sess.openNew(entry.lockKey);
+  sess.replaceDrawing(id, drawing, entry.lockKey);
   return true;
 }
 
@@ -349,6 +358,8 @@ async function flushSlice(sliceId: string, drawing: Drawing, name: string): Prom
   }
   // A new autosave invalidates a prior "dismissed" choice.
   await idbSet(`autosave-dismissed/${lockKey}`, false);
+  // Surface the timestamp so the UI can render "last autosave: Ns ago".
+  useAutosaveState.getState().recordSnapshot(lockKey, iso);
 }
 
 /* ────────────── debounced subscription ────────────── */
@@ -450,6 +461,85 @@ export function startAutosave(): () => void {
     unsubscribe = null;
   };
   return unsubscribe;
+}
+
+/* ────────────── AutosaveService factory (T108 public contract) ────────────── */
+
+export interface AutosaveService {
+  start(): void;
+  stop(): void;
+  forceSnapshot(): Promise<void>;
+  list(handleKey: string): Promise<AutosaveSnapshot[]>;
+  restore(handleKey: string, isoTimestamp: string): Promise<Uint8Array | null>;
+  purgeOlderThan(handleKey: string, isoTimestamp: string): Promise<number>;
+}
+
+export interface CreateAutosaveServiceOpts {
+  sessionStore: typeof useDrawingSession;
+  intervalMs?: number;
+}
+
+/**
+ * Build an AutosaveService bound to a session store. The factory wraps
+ * the module-level subscription helpers so callers can swap stores in
+ * tests; in production only one service is constructed.
+ */
+export function createAutosaveService(
+  opts: CreateAutosaveServiceOpts,
+): AutosaveService {
+  if (opts.intervalMs !== undefined) {
+    setAutosaveDebounceMs(opts.intervalMs);
+  }
+  let stop: (() => void) | null = null;
+  return {
+    start() {
+      if (stop) return;
+      stop = startAutosave();
+    },
+    stop() {
+      stop?.();
+      stop = null;
+    },
+    async forceSnapshot() {
+      // First drain any debounced timers, then snapshot any still-dirty
+      // slices belonging to the bound store.
+      await flushNow();
+      const { slices } = opts.sessionStore.getState();
+      for (const s of slices) {
+        if (s.dirty) await flushSlice(s.id, s.drawing, s.name);
+      }
+    },
+    async list(handleKey) {
+      const entries = await listAutosavesFor(handleKey);
+      const out: AutosaveSnapshot[] = [];
+      for (const e of entries) {
+        const bytes = await readAutosaveBytes(e);
+        if (!bytes) continue;
+        out.push({
+          handleKey,
+          isoTimestamp: e.iso,
+          bytes,
+          bytesGzipped: true,
+        });
+      }
+      return out;
+    },
+    async restore(handleKey, isoTimestamp) {
+      return readAutosaveBytes({ lockKey: handleKey, iso: isoTimestamp });
+    },
+    async purgeOlderThan(handleKey, isoTimestamp) {
+      const root = await getOpfsRoot();
+      const isos = root
+        ? await opfsListSnapshots(root, handleKey)
+        : await idbListSnapshots(handleKey);
+      const toDrop = isos.filter((iso) => iso < isoTimestamp);
+      for (const iso of toDrop) {
+        if (root) await opfsDeleteSnapshot(root, handleKey, iso);
+        else await idbDeleteSnapshot(handleKey, iso);
+      }
+      return toDrop.length;
+    },
+  };
 }
 
 /** Test-only: clear all autosave state in OPFS+IDB. */

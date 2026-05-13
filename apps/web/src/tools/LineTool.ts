@@ -43,7 +43,16 @@ export class LineTool implements Tool {
 
   private applySnap(world: Vec2Type): Vec2Type {
     const hit = snapEndpoint(world, this.ctx.bus.drawing, 1);
-    useSnapState.getState().set(hit ? hit.point : null);
+    if (hit) {
+      useSnapState.getState().setMarker({
+        point: hit.point,
+        mode: hit.mode,
+        strength: hit.strength,
+        lastCommittedPoint: this.startPoint,
+      });
+    } else {
+      useSnapState.getState().setMarker(null);
+    }
     return hit ? hit.point : world;
   }
 

@@ -7,8 +7,10 @@
 // scene/effectiveStyle.ts. Adding the fields cleanly on `Drawing`
 // (not via `extra`) is fine here — no other agent is mid-flight on
 // scene/types.ts on this branch (git status confirms).
+import type { Draft } from "immer";
 import type { Id } from "../ids.js";
 import { newId } from "../ids.js";
+import type { Command } from "../commands/CommandBus.js";
 import type { ColorRef, Drawing } from "./types.js";
 
 /** Arrowhead form per FR-013 dimension style. */
@@ -55,4 +57,61 @@ export function getDimensionStyle(d: Drawing, id: Id | undefined): DimensionStyl
   const fallbackId = d.defaultDimensionStyleId;
   if (id && styles[id]) return styles[id]!;
   return styles[fallbackId]!;
+}
+
+// T083 — `createDimensionStyle` command.
+//
+// Clones an existing style (or the default) and applies optional
+// overrides, pushing the new record into `Drawing.dimensionStyles`.
+// Undoable: inverse removes the freshly-added style. Like the draw
+// commands, the id is allocated at construction so apply/inverse/redo
+// see one stable identity.
+
+export interface CreateDimensionStyleParams {
+  /** Display name. Must be non-empty. */
+  name: string;
+  /** Style to clone before applying overrides; falls back to default. */
+  base?: Id;
+  /** Optional partial overrides applied on top of the cloned style. */
+  overrides?: Partial<Omit<DimensionStyle, "id" | "name">>;
+}
+
+export interface CreateDimensionStyleResult {
+  styleId: Id;
+}
+
+export function createDimensionStyleCommand(
+  params: CreateDimensionStyleParams,
+): Command<CreateDimensionStyleParams> & { result: CreateDimensionStyleResult } {
+  if (params.name.trim().length === 0) {
+    throw new Error("createDimensionStyle: name must be non-empty");
+  }
+  const newStyleId = newId();
+  const result: CreateDimensionStyleResult = { styleId: newStyleId };
+  return {
+    name: "settings.createDimensionStyle",
+    params,
+    result,
+    apply(draft: Draft<Drawing>) {
+      const baseId = params.base ?? draft.defaultDimensionStyleId;
+      const base = draft.dimensionStyles[baseId] ?? draft.dimensionStyles[draft.defaultDimensionStyleId]!;
+      const next: DimensionStyle = {
+        id: newStyleId,
+        name: params.name,
+        arrowType: base.arrowType,
+        arrowSize: base.arrowSize,
+        textHeight: base.textHeight,
+        textColor: base.textColor,
+        extensionLineGap: base.extensionLineGap,
+        dimensionLineOffset: base.dimensionLineOffset,
+        precision: base.precision,
+        suppressZeros: base.suppressZeros,
+        ...params.overrides,
+      };
+      draft.dimensionStyles[newStyleId] = next;
+    },
+    inverse(draft: Draft<Drawing>) {
+      delete draft.dimensionStyles[newStyleId];
+    },
+  };
 }
