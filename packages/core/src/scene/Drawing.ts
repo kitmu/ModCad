@@ -12,6 +12,7 @@ import type {
   Layer,
   Unit,
 } from "./types.js";
+import { defaultDimensionStyle } from "./dimensionStyle.js";
 
 const DEFAULT_LAYER_COLOR = { r: 1, g: 1, b: 1, a: 1 };
 
@@ -44,6 +45,7 @@ export interface NewDrawingOptions {
 
 export function newDrawing(opts: NewDrawingOptions = {}): Drawing {
   const layer = defaultLayer();
+  const dimStyle = defaultDimensionStyle();
   return {
     version: "1.0",
     units: opts.units ?? "mm",
@@ -56,6 +58,8 @@ export function newDrawing(opts: NewDrawingOptions = {}): Drawing {
     entities: {},
     entityOrder: [],
     settings: defaultSettings(),
+    dimensionStyles: { [dimStyle.id]: dimStyle },
+    defaultDimensionStyleId: dimStyle.id,
     extra: {},
   };
 }

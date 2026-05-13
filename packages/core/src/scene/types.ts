@@ -55,6 +55,21 @@ export interface DrawingSettings {
   pointStyle: PointStyle;
 }
 
+// Forward-declared here so `Drawing` can reference it without scene/types.ts
+// taking a dependency on scene/dimensionStyle.ts (that file imports `Drawing`).
+export interface DimensionStyleRecord {
+  id: Id;
+  name: string;
+  arrowType: "closed-filled" | "open" | "tick" | "none";
+  arrowSize: number;
+  textHeight: number;
+  textColor: ColorRef;
+  extensionLineGap: number;
+  dimensionLineOffset: number;
+  precision: number;
+  suppressZeros: boolean;
+}
+
 export interface Layer {
   id: Id;
   name: string;
@@ -80,6 +95,11 @@ export interface Drawing {
   entities: Record<Id, Entity>;
   entityOrder: Id[];
   settings: DrawingSettings;
+  // FR-013 dimension styles: project-wide style record + the id of the
+  // style new dimensions adopt by default. Existing files that lack
+  // these fields are upgraded by `rehydrateDrawing` in the .modcad reader.
+  dimensionStyles: Record<Id, DimensionStyleRecord>;
+  defaultDimensionStyleId: Id;
   // Unknown top-level fields preserved on round-trip per FR Edge Case.
   extra: Record<string, unknown>;
 }

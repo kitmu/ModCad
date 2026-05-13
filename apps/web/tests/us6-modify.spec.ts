@@ -51,13 +51,13 @@ async function pointerClick(page: Page, x: number, y: number): Promise<void> {
   await page.mouse.up();
 }
 
-/** Seed the active drawing with raw entities. Bypasses tools so the
- *  test can position geometry deterministically without depending on
- *  the renderer's noop fallback. */
+/** Seed the active drawing with raw entities. Preserves the live
+ *  drawing's settings (snapModes Set, point style, …) so the renderer
+ *  + tool wiring stays consistent. */
 async function seedDrawing(
   page: Page,
   entities: Array<
-    | { kind: "line"; a: [number, number]; b: [number, number] }
+    { kind: "line"; a: [number, number]; b: [number, number] }
   >,
 ): Promise<void> {
   await page.evaluate((ents) => {
@@ -65,11 +65,17 @@ async function seedDrawing(
     if (!api) throw new Error("no dev api");
     const d = api.activeDrawing;
     if (!d) throw new Error("no active drawing");
-    // Build a fresh drawing object mirroring the shape, with provided ids.
-    const next = JSON.parse(JSON.stringify(d)) as {
+    // Shallow-clone Drawing but keep settings (and its snapModes Set)
+    // untouched — JSON-roundtrip would lose Set instances.
+    const dCast = d as unknown as {
       entityOrder: string[];
       entities: Record<string, unknown>;
       currentLayerId: string;
+    };
+    const next = {
+      ...dCast,
+      entityOrder: [...dCast.entityOrder],
+      entities: { ...dCast.entities },
     };
     let counter = 0;
     for (const e of ents) {
@@ -91,7 +97,11 @@ async function seedDrawing(
 
 async function setSelection(page: Page, ids: string[]): Promise<void> {
   await page.evaluate((sel) => {
-    window.__modcad?.setSelection(sel);
+    (
+      window.__modcad as unknown as {
+        setSelection: (ids: string[]) => void;
+      } | undefined
+    )?.setSelection(sel);
   }, ids);
 }
 
