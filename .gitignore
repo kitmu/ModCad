@@ -34,3 +34,7 @@ test-results/
 
 # Spec-kit local state that downstream commands regenerate
 .specify/.cache/
+
+# Claude Code agent worktrees (each runs as its own git checkout)
+.claude/worktrees/
+
