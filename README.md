@@ -1,20 +1,25 @@
 # ModCad
 
+![ModCad](docs/screenshots/with-drawing.png)
+
 A browser-native CAD application — the power of AutoCAD with a modern,
 keyboard-first UI, zero install, and offline-first persistence.
 
-This repository is at the **specification** stage. No app code has been
-written yet. The project is being developed via
+The project is developed via
 [GitHub spec-kit](https://github.com/github/spec-kit): each feature
 starts as a `spec.md`, gets a `plan.md`, then a `tasks.md`, then code.
 
 ## Status
 
-- ✅ Constitution drafted — see [`.specify/memory/constitution.md`](.specify/memory/constitution.md)
-- ✅ v1 spec drafted — see [`specs/001-2d-drafting-mvp/spec.md`](specs/001-2d-drafting-mvp/spec.md)
-- ⏳ Plan — next, run `/speckit.plan`
-- ⏳ Tasks — run `/speckit.tasks` after the plan is approved
-- ⏳ Implementation — run `/speckit.implement` after tasks are approved
+- Phase 1–10 implemented: US1–US6 user stories, command palette,
+  layers, snapping, DXF interop, grip modify, autosave/restore,
+  cross-tab locks, history panel.
+- **Phase 11 (Polish)** in progress: theme toggle, react-intl i18n
+  pipeline, axe-core accessibility audit, bundle-size budget,
+  contributor docs.
+- See [`specs/001-2d-drafting-mvp/tasks.md`](specs/001-2d-drafting-mvp/tasks.md)
+  for the task ledger and the constitution at
+  [`.specify/memory/constitution.md`](.specify/memory/constitution.md).
 
 ## Spec-driven workflow
 

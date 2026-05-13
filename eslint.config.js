@@ -79,7 +79,7 @@ export default [
     // Tooling helper scripts run in Node, not the browser.
     files: ["tooling/**/*.mjs", "benchmarks/**/*.mjs"],
     languageOptions: {
-      globals: { process: "readonly", console: "readonly", URL: "readonly" },
+      globals: { process: "readonly", console: "readonly", URL: "readonly", window: "readonly" },
     },
     rules: { "no-console": "off" },
   },
